@@ -308,7 +308,7 @@
   {
     "category": "functional",
     "name": "game_state_ingestion",
-    "passing": false,
+    "passing": true,
     "description": "The external service pushes a game state JSON payload to the agent before each at-bat. This feature handles parsing the MLB Stats API live game feed response into the agent's input models (MatchupState, RosterState, OpponentRosterState).",
     "steps": [
       "Accept a raw game state JSON payload (either MLB Stats API format or a pre-parsed intermediate format)",
