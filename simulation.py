@@ -1694,6 +1694,585 @@ class SimulationEngine:
 
 
 # ---------------------------------------------------------------------------
+# Game state -> Agent scenario conversion
+# ---------------------------------------------------------------------------
+
+def game_state_to_scenario(game_state: GameState, managed_team: str = "home") -> dict:
+    """Convert simulation GameState to agent-compatible scenario dict.
+
+    Returns a dict with matchup_state, roster_state, opponent_roster_state,
+    and decision_prompt -- the same structure the agent expects.
+
+    Args:
+        game_state: The current authoritative game state.
+        managed_team: Which team the agent manages ("home" or "away").
+    """
+    is_home = managed_team == "home"
+    our_team = game_state.home if is_home else game_state.away
+    opp_team = game_state.away if is_home else game_state.home
+
+    bt = game_state.batting_team()
+    ft = game_state.fielding_team()
+    pitcher = game_state.current_pitcher()
+    batter = bt.current_batter()
+    on_deck = bt.on_deck_batter()
+
+    # Determine if we're batting or fielding
+    we_are_batting = (bt == our_team)
+
+    # Build runner info
+    def _runner_info(runner: BaseRunner | None) -> dict | None:
+        if runner is None:
+            return None
+        sp = runner.player
+        return {
+            "player_id": sp.player_id,
+            "name": sp.name,
+            "sprint_speed": sp.speed,
+            "sb_success_rate": 0.50 + (sp.speed / 100) * 0.30,
+        }
+
+    runners_dict = {
+        "first": _runner_info(game_state.runner_on(1)),
+        "second": _runner_info(game_state.runner_on(2)),
+        "third": _runner_info(game_state.runner_on(3)),
+    }
+
+    # Pitcher info
+    pstats = ft.get_pitcher_stats(pitcher.player_id)
+    tto = max(1, int(pstats.batters_faced / 9) + 1) if pstats.batters_faced > 0 else 1
+
+    matchup_state = {
+        "inning": game_state.inning,
+        "half": game_state.half,
+        "outs": game_state.outs,
+        "count": {"balls": 0, "strikes": 0},
+        "runners": runners_dict,
+        "score": {"home": game_state.score_home, "away": game_state.score_away},
+        "batting_team": "HOME" if bt == game_state.home else "AWAY",
+        "batter": {
+            "player_id": batter.player_id,
+            "name": batter.name,
+            "bats": batter.bats,
+            "lineup_position": bt.lineup_index + 1,
+        },
+        "pitcher": {
+            "player_id": pitcher.player_id,
+            "name": pitcher.name,
+            "throws": pitcher.throws,
+            "pitch_count_today": pstats.pitches,
+            "batters_faced_today": pstats.batters_faced,
+            "times_through_order": tto,
+            "innings_pitched_today": pstats.ip,
+            "runs_allowed_today": pstats.runs,
+            "today_line": pstats.to_dict(),
+        },
+        "on_deck_batter": {
+            "player_id": on_deck.player_id,
+            "name": on_deck.name,
+            "bats": on_deck.bats,
+        },
+    }
+
+    # Build roster state for our team
+    our_lineup = []
+    for i, p in enumerate(our_team.lineup):
+        our_lineup.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "position": our_team.lineup_positions[i] if i < len(our_team.lineup_positions) else p.primary_position,
+            "bats": p.bats,
+            "in_game": p.player_id not in our_team.removed_players,
+        })
+
+    our_bench = []
+    for p in our_team.bench:
+        our_bench.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "bats": p.bats,
+            "positions": p.positions if p.positions else [p.primary_position],
+            "available": p.player_id not in our_team.removed_players,
+        })
+
+    our_bullpen = []
+    for p in our_team.bullpen:
+        available = p.player_id not in our_team.used_pitchers
+        our_bullpen.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "throws": p.throws,
+            "role": p.role.upper() if p.role else "MIDDLE",
+            "available": available,
+            "freshness": "FRESH",
+            "pitches_last_3_days": [0, 0, 0],
+            "days_since_last_appearance": 5,
+            "is_warming_up": False,
+        })
+
+    roster_state = {
+        "our_lineup": our_lineup,
+        "our_lineup_position": our_team.lineup_index,
+        "bench": our_bench,
+        "bullpen": our_bullpen,
+        "mound_visits_remaining": our_team.mound_visits_remaining,
+        "challenge_available": our_team.challenge_available,
+    }
+
+    # Build opponent roster state
+    opp_lineup = []
+    for i, p in enumerate(opp_team.lineup):
+        opp_lineup.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "position": opp_team.lineup_positions[i] if i < len(opp_team.lineup_positions) else p.primary_position,
+            "bats": p.bats,
+            "in_game": p.player_id not in opp_team.removed_players,
+        })
+
+    opp_bench = []
+    for p in opp_team.bench:
+        opp_bench.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "bats": p.bats,
+            "available": p.player_id not in opp_team.removed_players,
+        })
+
+    opp_bullpen = []
+    for p in opp_team.bullpen:
+        available = p.player_id not in opp_team.used_pitchers
+        opp_bullpen.append({
+            "player_id": p.player_id,
+            "name": p.name,
+            "throws": p.throws,
+            "role": p.role.upper() if p.role else "MIDDLE",
+            "available": available,
+            "freshness": "FRESH",
+        })
+
+    opponent_roster_state = {
+        "their_lineup": opp_lineup,
+        "their_lineup_position": opp_team.lineup_index,
+        "their_bench": opp_bench,
+        "their_bullpen": opp_bullpen,
+    }
+
+    # Build decision prompt
+    score_diff = game_state.score_home - game_state.score_away
+    if is_home:
+        score_desc = f"Your team leads {score_diff}" if score_diff > 0 else (
+            f"Your team trails {abs(score_diff)}" if score_diff < 0 else "Tied game"
+        )
+    else:
+        score_desc = f"Your team leads {abs(score_diff)}" if score_diff < 0 else (
+            f"Your team trails {score_diff}" if score_diff > 0 else "Tied game"
+        )
+
+    half_str = "Top" if game_state.half == "TOP" else "Bottom"
+    runner_descs = []
+    for base, label in [(1, "1st"), (2, "2nd"), (3, "3rd")]:
+        r = game_state.runner_on(base)
+        if r:
+            runner_descs.append(f"{r.player.name} on {label}")
+    runners_text = ", ".join(runner_descs) if runner_descs else "bases empty"
+
+    if we_are_batting:
+        decision_prompt = (
+            f"{half_str} of the {_ordinal_standalone(game_state.inning)}, {game_state.outs} out, {runners_text}. "
+            f"Score: Away {game_state.score_away}, Home {game_state.score_home}. {score_desc}. "
+            f"{batter.name} ({batter.bats}) is batting against {pitcher.name} ({pitcher.throws}HP, "
+            f"{pstats.pitches} pitches). On deck: {on_deck.name} ({on_deck.bats}). "
+            f"Your team is BATTING. Consider: pinch-hit, stolen base, sacrifice bunt, hit-and-run, "
+            f"or let the batter swing away. Gather relevant data with tools before deciding."
+        )
+    else:
+        decision_prompt = (
+            f"{half_str} of the {_ordinal_standalone(game_state.inning)}, {game_state.outs} out, {runners_text}. "
+            f"Score: Away {game_state.score_away}, Home {game_state.score_home}. {score_desc}. "
+            f"{batter.name} ({batter.bats}) is batting against your pitcher {pitcher.name} "
+            f"({pitcher.throws}HP, {pstats.pitches} pitches, {pstats.ip:.1f} IP, {pstats.runs} R). "
+            f"On deck: {on_deck.name} ({on_deck.bats}). "
+            f"Your team is FIELDING. Consider: pitching change, defensive positioning, intentional walk, "
+            f"mound visit, or no action needed. Gather relevant data with tools before deciding."
+        )
+
+    return {
+        "matchup_state": matchup_state,
+        "roster_state": roster_state,
+        "opponent_roster_state": opponent_roster_state,
+        "decision_prompt": decision_prompt,
+    }
+
+
+def _ordinal_standalone(n: int) -> str:
+    """Return ordinal string for an integer."""
+    if 11 <= n % 100 <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+# ---------------------------------------------------------------------------
+# Decision validation and application
+# ---------------------------------------------------------------------------
+
+class DecisionResult:
+    """Result of applying a ManagerDecision to the game state."""
+    __slots__ = ("valid", "error", "description", "events")
+
+    def __init__(self, valid: bool, error: str = "", description: str = "",
+                 events: list[PlayEvent] | None = None):
+        self.valid = valid
+        self.error = error
+        self.description = description
+        self.events = events or []
+
+
+def validate_and_apply_decision(game_state: GameState, decision: dict,
+                                managed_team: str, engine: "SimulationEngine") -> DecisionResult:
+    """Validate a ManagerDecision and apply it to the game state.
+
+    Args:
+        game_state: Current game state.
+        decision: Dict with at least "decision" and "action_details" keys.
+        managed_team: "home" or "away".
+        engine: The SimulationEngine instance.
+
+    Returns:
+        DecisionResult with validity status and any events generated.
+    """
+    is_home = managed_team == "home"
+    our_team = game_state.home if is_home else game_state.away
+    opp_team = game_state.away if is_home else game_state.home
+    bt = game_state.batting_team()
+    ft = game_state.fielding_team()
+    we_are_batting = (bt == our_team)
+
+    decision_type = decision.get("decision", "").upper().strip()
+
+    # No-action decisions: these are always valid
+    no_action_types = {
+        "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
+        "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    }
+    if decision_type in no_action_types or not decision_type:
+        return DecisionResult(
+            valid=True,
+            description=f"Manager decision: {decision_type or 'no action'} - {decision.get('action_details', '')}",
+        )
+
+    # PITCHING_CHANGE / PULL_STARTER
+    if decision_type in ("PITCHING_CHANGE", "PULL_STARTER", "BRING_IN_RELIEVER"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot make pitching change while batting")
+
+        # Check 3-batter minimum
+        if ft.current_pitcher_batters_faced_this_stint < 3 and game_state.outs < 3:
+            return DecisionResult(
+                valid=False,
+                error=f"3-batter minimum not met ({ft.current_pitcher_batters_faced_this_stint} faced). "
+                      f"Pitcher must face at least 3 batters before being removed."
+            )
+
+        # Find the replacement pitcher
+        new_pitcher_id = _extract_player_id(decision.get("action_details", ""), our_team)
+        if not new_pitcher_id:
+            # Try to find any available reliever
+            available = [p for p in our_team.bullpen if p.player_id not in our_team.used_pitchers]
+            if not available:
+                return DecisionResult(valid=False, error="No available relievers in bullpen")
+            new_pitcher = available[0]
+        else:
+            new_pitcher = our_team.get_player_by_id(new_pitcher_id)
+            if not new_pitcher:
+                return DecisionResult(valid=False, error=f"Player {new_pitcher_id} not found on roster")
+            if new_pitcher_id in our_team.used_pitchers:
+                return DecisionResult(valid=False, error=f"Pitcher {new_pitcher.name} has already been used")
+
+        event = engine._change_pitcher(game_state, our_team, new_pitcher)
+        return DecisionResult(
+            valid=True,
+            description=f"Pitching change: {new_pitcher.name}",
+            events=[event],
+        )
+
+    # PINCH_HIT
+    if decision_type in ("PINCH_HIT", "PINCH_HITTER"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot pinch hit while fielding")
+
+        # Prioritize bench players when extracting the pinch hitter
+        pinch_hitter_id = _extract_player_id_from_bench(decision.get("action_details", ""), our_team)
+        if not pinch_hitter_id:
+            pinch_hitter_id = _extract_player_id(decision.get("action_details", ""), our_team)
+        if not pinch_hitter_id:
+            return DecisionResult(valid=False, error="Could not identify pinch hitter from action details")
+
+        pinch_hitter = our_team.get_player_by_id(pinch_hitter_id)
+        if not pinch_hitter:
+            return DecisionResult(valid=False, error=f"Player {pinch_hitter_id} not found on roster")
+        if pinch_hitter_id in our_team.removed_players:
+            return DecisionResult(valid=False, error=f"{pinch_hitter.name} has already been removed from game")
+
+        # Execute the substitution
+        current_batter = bt.current_batter()
+        old_idx = bt.lineup_index
+        our_team.lineup[old_idx] = pinch_hitter
+        our_team.removed_players.append(current_batter.player_id)
+
+        # Remove from bench if present
+        our_team.bench = [p for p in our_team.bench if p.player_id != pinch_hitter_id]
+
+        desc = f"Pinch hitter: {pinch_hitter.name} batting for {current_batter.name}"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # STOLEN_BASE
+    if decision_type in ("STOLEN_BASE", "STEAL"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot attempt steal while fielding")
+
+        # Determine which runner to send
+        r1 = game_state.runner_on(1)
+        r2 = game_state.runner_on(2)
+        runner = None
+        target_base = 0
+        if r1 and not game_state.runner_on(2):
+            runner = r1
+            target_base = 2
+        elif r2 and not game_state.runner_on(3):
+            runner = r2
+            target_base = 3
+        elif r1:
+            runner = r1
+            target_base = 2
+
+        if not runner:
+            return DecisionResult(valid=False, error="No eligible runner for stolen base attempt")
+
+        # Resolve the steal
+        catcher = None
+        for p in ft.lineup:
+            if p.primary_position == "C":
+                catcher = p
+                break
+
+        result = engine.resolve_stolen_base(runner, target_base, game_state.current_pitcher(), catcher, game_state)
+        game_state.runners = result["new_runners"]
+        game_state.outs += result["outs_recorded"]
+
+        # Update stats
+        batter_team = game_state.batting_team()
+        rstats = batter_team.get_batter_stats(runner.player.player_id)
+        if result["success"]:
+            rstats.sb += 1
+        else:
+            rstats.cs += 1
+
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs - result["outs_recorded"],
+            description=result["description"],
+            event_type="steal",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+
+        # Check if 3 outs after CS
+        events = [event]
+        if game_state.outs >= 3:
+            events.extend(engine._end_half_inning(game_state))
+
+        return DecisionResult(valid=True, description=result["description"], events=events)
+
+    # INTENTIONAL_WALK
+    if decision_type in ("INTENTIONAL_WALK", "IBB"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot issue intentional walk while batting")
+
+        batter = bt.current_batter()
+        walk_result = engine.resolve_walk(batter, game_state)
+
+        # Update stats
+        bt_stats = bt.get_batter_stats(batter.player_id)
+        bt_stats.bb += 1
+        pitcher = game_state.current_pitcher()
+        pstats = ft.get_pitcher_stats(pitcher.player_id)
+        pstats.bb += 1
+        pstats.batters_faced += 1
+
+        # Apply walk
+        runs = walk_result["runs_scored"]
+        if game_state.half == "TOP":
+            game_state.score_away += runs
+        else:
+            game_state.score_home += runs
+        game_state._current_inning_runs += runs
+        game_state.runners = walk_result["new_runners"]
+
+        desc = f"Intentional walk to {batter.name}"
+        if runs > 0:
+            desc += f" (run scores! {game_state.score_display()})"
+
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="walk",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+            runs_scored=runs, batter_id=batter.player_id, pitcher_id=pitcher.player_id,
+        )
+        game_state.play_log.append(event)
+
+        ft.current_pitcher_batters_faced_this_stint += 1
+        bt.advance_batter()
+
+        # Check walk-off
+        events = [event]
+        if (game_state.half == "BOTTOM" and game_state.inning >= 9 and
+                game_state.score_home > game_state.score_away):
+            game_state.game_over = True
+            game_state.winning_team = game_state.home.name
+            end_event = PlayEvent(
+                inning=game_state.inning, half=game_state.half,
+                outs_before=game_state.outs,
+                description=f"Walk-off! {game_state.home.name} wins {game_state.score_home}-{game_state.score_away}!",
+                event_type="game_end",
+                score_home=game_state.score_home, score_away=game_state.score_away,
+            )
+            game_state.play_log.append(end_event)
+            events.append(end_event)
+
+        return DecisionResult(valid=True, description=desc, events=events)
+
+    # DEFENSIVE_POSITIONING
+    if decision_type in ("DEFENSIVE_POSITIONING", "SHIFT", "INFIELD_IN", "POSITION_CHANGE"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot change defensive positioning while batting")
+        desc = f"Defensive positioning adjusted: {decision.get('action_details', '')}"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # MOUND_VISIT
+    if decision_type in ("MOUND_VISIT",):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot make mound visit while batting")
+        if our_team.mound_visits_remaining <= 0:
+            return DecisionResult(valid=False, error="No mound visits remaining")
+        our_team.mound_visits_remaining -= 1
+        desc = f"Mound visit ({our_team.mound_visits_remaining} remaining)"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # SACRIFICE_BUNT / BUNT
+    if decision_type in ("SACRIFICE_BUNT", "BUNT", "SQUEEZE"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot bunt while fielding")
+        # Bunt is a strategic intent -- the plate appearance will still be simulated
+        # but we log the intent and return valid (the actual bunt outcome is resolved
+        # by the simulation engine in the next PA)
+        desc = f"Bunt/sacrifice attempt by {bt.current_batter().name}"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # PINCH_RUN
+    if decision_type in ("PINCH_RUN", "PINCH_RUNNER"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot pinch run while fielding")
+        desc = f"Pinch runner: {decision.get('action_details', '')}"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # REPLAY_CHALLENGE
+    if decision_type in ("REPLAY_CHALLENGE", "CHALLENGE"):
+        if not our_team.challenge_available:
+            return DecisionResult(valid=False, error="No challenge available")
+        # Challenges don't affect game state mechanically in this simulation
+        desc = f"Replay challenge: {decision.get('action_details', '')}"
+        event = PlayEvent(
+            inning=game_state.inning, half=game_state.half,
+            outs_before=game_state.outs, description=desc,
+            event_type="decision",
+            score_home=game_state.score_home, score_away=game_state.score_away,
+        )
+        game_state.play_log.append(event)
+        return DecisionResult(valid=True, description=desc, events=[event])
+
+    # Unknown decision type -- treat as no-action
+    return DecisionResult(
+        valid=True,
+        description=f"Manager decision: {decision_type} - {decision.get('action_details', '')} (unrecognized, treating as no action)",
+    )
+
+
+def _extract_player_id(action_details: str, team: TeamState) -> str | None:
+    """Try to extract a player_id from action details text.
+
+    Checks for explicit player_id references and name matches.
+    """
+    # Check for explicit player_id in the text
+    all_players = (
+        list(team.lineup) + list(team.bench) + list(team.bullpen) +
+        ([team.starting_pitcher] if team.starting_pitcher else []) +
+        ([team.current_pitcher] if team.current_pitcher else [])
+    )
+
+    for p in all_players:
+        if p.player_id in action_details:
+            return p.player_id
+        # Check for name match (case-insensitive)
+        if p.name.lower() in action_details.lower():
+            return p.player_id
+
+    return None
+
+
+def _extract_player_id_from_bench(action_details: str, team: TeamState) -> str | None:
+    """Extract player_id prioritizing bench players only.
+
+    Used for pinch-hit decisions where we want the replacement player,
+    not the current batter who might also be mentioned in the text.
+    """
+    for p in team.bench:
+        if p.player_id in action_details:
+            return p.player_id
+        if p.name.lower() in action_details.lower():
+            return p.player_id
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Serialization support
 # ---------------------------------------------------------------------------
 

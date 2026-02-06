@@ -236,6 +236,7 @@
   {
     "category": "functional",
     "name": "agent_decision_loop",
+    "status": "passing",
     "description": "The core game loop that presents the current game state to the Claude agent at each decision point, allows it to gather context via tools, receives its decision as structured output, and advances the simulation accordingly.",
     "steps": [
       "At each decision point, the agent is prompted with the MatchupState, RosterState, OpponentRosterState, and a natural language description of what decision is needed",
