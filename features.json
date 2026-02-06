@@ -2,7 +2,7 @@
   {
     "category": "architecture",
     "name": "repo_setup",
-    "passing": false,
+    "passing": true,
     "description": "Bootstrap the project with the entry point script, data models, and tools directory. Creates the agent entry point as a single-file UV script, the tools/ directory with stubs for all 12 tools, and the Pydantic models for game state input (MatchupState, RosterState, OpponentRosterState).",
     "steps": [
       "Create the agent entry point script with a PEP 723 inline metadata block declaring dependencies (anthropic, pydantic, pybaseball)",
