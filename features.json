@@ -2,66 +2,168 @@
   {
     "category": "architecture",
     "name": "repo_setup",
-    "status": "passing",
-    "description": "Bootstrap the project repository with the initial directory structure, main entry point script, and foundational modules. Creates game.py as a single-file UV script with inline PEP 723 metadata, the tools/ directory with placeholder files for all 12 tools, the player data model, the game state model, and the ManagerDecision output schema. After this feature is complete, the project skeleton is in place and all other features build on top of it.",
+    "passing": false,
+    "description": "Bootstrap the project with the entry point script, data models, and tools directory. Creates the agent entry point as a single-file UV script, the tools/ directory with stubs for all 12 tools, and the Pydantic models for game state input (MatchupState, RosterState, OpponentRosterState).",
     "steps": [
-      "Create game.py as the main entry point with a PEP 723 inline metadata block declaring dependencies (anthropic, pydantic)",
+      "Create the agent entry point script with a PEP 723 inline metadata block declaring dependencies (anthropic, pydantic, pybaseball)",
       "Create the tools/ directory with an __init__.py and one .py file per tool (all 12 tools as stubs that return placeholder JSON)",
-      "Define the MatchupState, RosterState, and OpponentRosterState data models as Pydantic classes in a models.py file, matching the schemas from DESIGN.md",
-      "Define the ManagerDecision Pydantic model as the structured output schema in models.py",
-      "Define the Player, Batter, Pitcher, and Fielder data models in models.py with all attributes specified in the player_data_model feature",
-      "Create a sample roster JSON file (data/sample_rosters.json) with two complete 26-man rosters for testing",
-      "Wire up game.py to instantiate the Claude Agent SDK client, register all 12 tool stubs, and run a single-turn test that sends a minimal scenario and receives a ManagerDecision response",
-      "Verify the project runs end-to-end with 'uv run game.py' -- the agent receives a scenario, can call stub tools, and returns a valid ManagerDecision",
-      "All files follow the single-file UV script convention where applicable (game.py has inline metadata; supporting modules are importable from game.py)"
+      "Define MatchupState, RosterState, and OpponentRosterState as Pydantic models in models.py, matching the schemas from DESIGN.md",
+      "Define a simple DecisionOutput model in models.py with fields: action (bool), decision_type (str | None), tweet_text (str), reasoning (str)",
+      "Wire up the entry point to instantiate the Claude Agent SDK client, register all 12 tool stubs, and accept a game state JSON as input",
+      "Verify the project runs with 'uv run agent.py <game_state.json>' -- the agent receives a game state, can call stub tools, and returns a plain-text decision"
+    ]
+  },
+  {
+    "category": "architecture",
+    "name": "claude_agent_sdk",
+    "passing": false,
+    "description": "The agent is built on the Claude Agent SDK. The SDK manages the tool-use loop: sending the game state to Claude, dispatching tool calls for information gathering, and receiving the agent's plain-text decision as output.",
+    "steps": [
+      "The agent is instantiated using the Claude Agent SDK client (anthropic package)",
+      "All 12 information-gathering tools are registered as SDK tool definitions with input schemas",
+      "The SDK manages the conversation loop: sending the game state and processing tool-use responses",
+      "The agent's system prompt instructs it to act as a baseball manager that gathers context via tools and responds with a plain-text decision",
+      "Tool call results are returned to the agent via the SDK's tool result mechanism",
+      "The agent can call multiple tools in a single turn to gather all needed context",
+      "After gathering sufficient context, the agent produces a plain-text decision as its final response",
+      "The SDK handles retries and error formatting when the agent makes an invalid tool call"
+    ]
+  },
+  {
+    "category": "architecture",
+    "name": "single_file_uv_scripts",
+    "passing": false,
+    "description": "All Python scripts are single-file UV executables. Each script includes an inline PEP 723 metadata block declaring its dependencies so it can be run directly with 'uv run script.py' without a separate requirements file or virtual environment.",
+    "steps": [
+      "Each .py file begins with a PEP 723 inline metadata block (/// script) declaring its dependencies",
+      "Scripts can be executed directly via 'uv run <script>.py' with no prior install step",
+      "No requirements.txt, pyproject.toml, or setup.py is needed",
+      "All dependencies including anthropic, pydantic, and pybaseball are declared inline",
+      "The main entry point can be run with 'uv run agent.py <game_state.json>'"
+    ]
+  },
+  {
+    "category": "data",
+    "name": "mlb_stats_api_client",
+    "passing": false,
+    "description": "Core client for the MLB Stats API (statsapi.mlb.com). Provides functions to fetch rosters, player metadata, and live game state. This is the foundation that the external service and tools build on.",
+    "steps": [
+      "Implement a data/mlb_api.py module with functions for common MLB Stats API endpoints",
+      "Fetch current 26-man active roster for a team by team ID or name",
+      "Fetch player metadata: name, position, handedness (bats/throws), jersey number",
+      "Fetch live game feed by gamePk: current inning, outs, count, runners, score, batter, pitcher",
+      "Fetch game schedule by date to find active gamePks",
+      "Fetch batter-vs-pitcher career stats from the API's vsPlayer endpoint",
+      "Map MLB Stats API player IDs to the fields needed by MatchupState, RosterState, and OpponentRosterState models",
+      "Handle API errors gracefully: connection failures, invalid IDs, off-season empty responses",
+      "Add request timeout and basic retry logic for transient failures"
+    ]
+  },
+  {
+    "category": "data",
+    "name": "statcast_player_stats",
+    "passing": false,
+    "description": "Integration with pybaseball to fetch real Statcast and FanGraphs player statistics. Provides season stats, splits, advanced metrics, and pitch-level data for use by the player stats tools.",
+    "steps": [
+      "Add pybaseball as an inline dependency in the relevant scripts",
+      "Fetch real batting stats: AVG, OBP, SLG, OPS, wOBA, wRC+, barrel rate, xwOBA, K%, BB%, chase rate, whiff rate, GB%, pull%, exit velocity, launch angle, sprint speed",
+      "Fetch real pitching stats: ERA, FIP, xFIP, K%, BB%, GB%, pitch mix with per-pitch velocity/spin/whiff rates",
+      "Support split queries: vs LHB/RHB, home/away, by filtering Statcast data or using FanGraphs splits",
+      "Fetch pitcher times-through-order wOBA splits",
+      "Fetch defensive metrics: OAA, DRS, UZR by position",
+      "Fetch catcher metrics: pop time, framing runs",
+      "Implement a local cache layer (JSON files in data/cache/) so repeated lookups do not re-fetch from the network",
+      "Cache entries expire after 24 hours to balance freshness with rate-limit friendliness"
+    ]
+  },
+  {
+    "category": "data",
+    "name": "batter_vs_pitcher_history",
+    "passing": false,
+    "description": "Fetch real batter-vs-pitcher matchup history from the MLB Stats API or pybaseball. Provides actual career head-to-head plate appearance results for use by the matchup data tool.",
+    "steps": [
+      "Use the MLB Stats API vsPlayer endpoint or pybaseball to fetch career matchup data",
+      "Retrieve career plate appearances, at-bats, hits, doubles, triples, home runs, walks, strikeouts, batting average, slugging, OPS",
+      "When the matchup has fewer than 10 plate appearances, flag as small sample",
+      "Cache matchup lookups in data/cache/matchups/ to avoid redundant API calls during a game",
+      "Handle cases where one or both players have no MLB history (rookies) by returning an empty result",
+      "Return a consistent JSON schema regardless of data availability"
+    ]
+  },
+  {
+    "category": "data",
+    "name": "retrosheet_run_expectancy",
+    "passing": false,
+    "description": "Pre-computed run expectancy matrices and win probability tables derived from real Retrosheet play-by-play data. These static lookup tables back the run expectancy and win probability tools.",
+    "steps": [
+      "Include a data/compute_re_matrix.py script that parses Retrosheet event files and computes the 24-state run expectancy matrix",
+      "Compute win probability tables indexed by (inning, half, outs, base state, score differential) from historical game outcomes",
+      "Compute leverage index values for each game state from the win probability table",
+      "Write computed tables to JSON files in data/ (re_matrix.json, win_probability.json, leverage_index.json)",
+      "Include pre-computed tables for recent seasons in the repository so tools work without running the computation script",
+      "The computation script is idempotent and can be re-run when new Retrosheet data is available"
+    ]
+  },
+  {
+    "category": "data",
+    "name": "data_caching",
+    "passing": false,
+    "description": "Caching layer for API responses to avoid redundant network calls during a game. Player stats, matchup data, and roster info are cached locally with configurable expiry.",
+    "steps": [
+      "Implement a data/cache.py module with get/set/invalidate functions",
+      "Cache is file-based (JSON files in data/cache/) for simplicity",
+      "Cache keys are derived from the API endpoint and parameters (player ID, season, split type)",
+      "Default TTL is 24 hours for season stats, 1 hour for live game data",
+      "Cache can be manually cleared via a CLI flag or by deleting the cache directory",
+      "All data-fetching functions in the data layer check cache before making network requests"
     ]
   },
   {
     "category": "tool",
     "name": "get_batter_stats",
-    "status": "passing",
-    "description": "Retrieves batting statistics for a player, including traditional stats, advanced metrics, plate discipline, batted ball profile, and sprint speed. Supports splits by handedness, home/away, and recency windows.",
+    "passing": false,
+    "description": "Retrieves real batting statistics from Statcast/FanGraphs for a player. Returns traditional stats, advanced metrics, plate discipline, batted ball profile, and sprint speed. Supports splits by handedness, home/away, and recency.",
     "steps": [
-      "Accepts a player identifier and optional split parameters (vs_hand: L/R, home_away, recency_window)",
+      "Accepts a player identifier (MLB player ID or name) and optional split parameters (vs_hand: L/R, home_away, recency_window)",
+      "Queries the statcast_player_stats data layer to fetch real stats",
       "Returns traditional stats: AVG, OBP, SLG, OPS",
       "Returns advanced metrics: wOBA, wRC+, barrel rate, xwOBA",
       "Returns plate discipline: K%, BB%, chase rate, whiff rate",
       "Returns batted ball profile: GB%, pull%, exit velocity, launch angle",
       "Returns sprint speed",
       "Returns situational stats: RISP, high leverage, late and close",
-      "Returns current game performance (today's line)",
-      "Returns an error if the player identifier is invalid"
+      "Returns an error if the player is not found"
     ]
   },
   {
     "category": "tool",
     "name": "get_pitcher_stats",
-    "status": "passing",
-    "description": "Retrieves pitching statistics for a pitcher, including ERA/FIP/xFIP, strikeout and walk rates, ground ball rate, pitch mix with per-pitch metrics, and times-through-order splits.",
+    "passing": false,
+    "description": "Retrieves real pitching statistics from Statcast/FanGraphs for a pitcher. Returns ERA/FIP/xFIP, strikeout and walk rates, ground ball rate, pitch mix with per-pitch metrics, and times-through-order splits.",
     "steps": [
       "Accepts a player identifier and optional split parameters (vs_hand: L/R, home_away, recency_window)",
+      "Queries the statcast_player_stats data layer to fetch real stats",
       "Returns ERA, FIP, xFIP, SIERA",
       "Returns K% and BB%",
       "Returns ground ball rate and batted ball distribution",
       "Returns pitch mix with per-pitch velocity, spin rate, and whiff rate",
       "Returns times-through-order wOBA splits (1st, 2nd, 3rd+)",
-      "Returns current game performance (today's line: IP, H, R, ER, BB, K)",
-      "Returns an error if the player identifier is invalid"
+      "Returns an error if the player is not found"
     ]
   },
   {
     "category": "tool",
     "name": "get_matchup_data",
-    "status": "passing",
-    "description": "Retrieves head-to-head batter vs pitcher history and similarity-based projections. Returns direct matchup results, sample-size reliability, similarity-model projected wOBA, and pitch-type vulnerability breakdown.",
+    "passing": false,
+    "description": "Retrieves real batter-vs-pitcher career history from the MLB Stats API. Returns direct matchup results, sample-size indicator, and pitch-type vulnerability breakdown. For small samples, supplements with similarity-based projections.",
     "steps": [
       "Accepts a batter identifier and a pitcher identifier",
+      "Queries the batter_vs_pitcher_history data layer for real matchup data",
       "Returns number of career plate appearances between the two players",
       "Returns batting average, slugging, and strikeout rate for the matchup",
-      "Returns outcome distribution (groundball, flyball, line drive rates)",
+      "Returns outcome distribution (groundball, flyball, line drive rates) when available",
       "Returns a sample-size reliability indicator (small/medium/large)",
-      "Returns similarity-model projected wOBA when sample is small",
-      "Returns pitch-type vulnerability breakdown for the batter against this pitcher's mix",
+      "When sample is small (<10 PA), returns a similarity-model projected wOBA",
       "Returns a meaningful response when no prior matchup history exists",
       "Returns an error if either player identifier is invalid"
     ]
@@ -69,41 +171,43 @@
   {
     "category": "tool",
     "name": "get_run_expectancy",
-    "status": "passing",
-    "description": "Returns expected runs for a given base-out state, probability of scoring at least one run, and the run distribution. Backed by the 24-state run expectancy matrix.",
+    "passing": false,
+    "description": "Returns expected runs for a given base-out state, probability of scoring at least one run, and the run distribution. Backed by the pre-computed 24-state run expectancy matrix from Retrosheet data.",
     "steps": [
       "Accepts base state (runners on 1st, 2nd, 3rd in any combination) and out count (0, 1, 2)",
+      "Loads the pre-computed RE matrix from data/re_matrix.json",
       "Returns expected runs from this state to end of inning",
       "Returns probability of scoring at least one run",
       "Returns run distribution (probability of scoring exactly 0, 1, 2, 3+ runs)",
-      "Returns the run expectancy change for common transitions (e.g., successful steal, caught stealing, sacrifice bunt)",
-      "Values are derived from the pre-computed 24-state run expectancy matrix"
+      "Returns the run expectancy change for common transitions (successful steal, caught stealing, sacrifice bunt)"
     ]
   },
   {
     "category": "tool",
     "name": "get_win_probability",
-    "status": "passing",
-    "description": "Returns win probability, leverage index, and conditional win probabilities given the full game state.",
+    "passing": false,
+    "description": "Returns win probability, leverage index, and conditional win probabilities given the full game state. Backed by pre-computed win probability tables from historical game outcomes.",
     "steps": [
       "Accepts inning, half (top/bottom), outs, base state, and score differential",
       "Optionally accepts home/away indicator for the managed team",
+      "Loads pre-computed WP and LI tables from data/win_probability.json and data/leverage_index.json",
       "Returns current win probability for the managed team",
       "Returns leverage index for the current situation",
-      "Returns conditional win probability if a run scores in this state",
-      "Returns conditional win probability if the inning ends scoreless",
-      "Values are derived from pre-computed win probability tables"
+      "Returns conditional win probability if a run scores",
+      "Returns conditional win probability if the inning ends scoreless"
     ]
   },
   {
     "category": "tool",
     "name": "evaluate_stolen_base",
-    "status": "passing",
+    "passing": false,
     "description": "Evaluates a potential stolen base attempt given runner speed, pitcher hold time, catcher arm, and current base-out state. Returns success probability, breakeven rate, expected run-expectancy change, and a recommendation.",
     "steps": [
       "Accepts runner identifier, target base, pitcher identifier, and catcher identifier",
+      "Fetches real runner sprint speed and SB success rate from Statcast",
+      "Fetches real catcher pop time from Statcast",
       "Returns estimated success probability based on runner speed, pitcher hold time, and catcher pop time",
-      "Returns breakeven success rate for this base-out state",
+      "Returns breakeven success rate for this base-out state (from RE matrix)",
       "Returns expected run-expectancy change if successful vs caught",
       "Returns net expected run-expectancy change (weighted by success probability)",
       "Returns a textual recommendation (favorable, marginal, unfavorable)",
@@ -113,75 +217,72 @@
   {
     "category": "tool",
     "name": "evaluate_sacrifice_bunt",
-    "status": "passing",
+    "passing": false,
     "description": "Evaluates whether a sacrifice bunt is optimal given the batter, base-out state, score differential, and inning. Compares bunt vs swing-away expected runs and probability of scoring at least one run.",
     "steps": [
       "Accepts batter identifier, base-out state, score differential, and inning",
-      "Returns expected runs if bunting vs swinging away",
+      "Returns expected runs if bunting vs swinging away (from RE matrix transitions)",
       "Returns probability of scoring at least one run if bunting vs swinging away",
-      "Returns the batter's bunt proficiency rating",
       "Returns net expected value comparison (bunt advantage or disadvantage)",
-      "Returns a textual recommendation with context (e.g., bunt is favorable in 1-run game, unfavorable with strong hitter)",
+      "Returns a textual recommendation with context (e.g., bunt may be favorable in 1-run game late)",
       "Returns an error if the player identifier is invalid"
     ]
   },
   {
     "category": "tool",
     "name": "get_bullpen_status",
-    "status": "passing",
-    "description": "Returns detailed status of all bullpen pitchers including availability, stats, freshness, rest days, recent pitch counts, platoon splits, and warm-up status.",
+    "passing": false,
+    "description": "Returns detailed status of all bullpen pitchers for the managed team. Combines roster availability from the game state with real season stats from Statcast/FanGraphs.",
     "steps": [
-      "Returns all bullpen pitchers for the managed team",
-      "Each pitcher includes availability status and reason if unavailable",
-      "Each pitcher includes role (closer, setup, middle, long, mopup)",
-      "Each pitcher includes freshness level (fresh, moderate, tired)",
-      "Each pitcher includes days since last appearance",
-      "Each pitcher includes pitch counts from last 3 appearances",
-      "Each pitcher includes platoon splits (vs LHB and vs RHB)",
-      "Each pitcher includes current warm-up state (cold, warming, ready)",
-      "Pitchers already used and removed in this game are excluded"
+      "Reads bullpen availability from the RosterState input (availability, freshness, rest days, pitch counts)",
+      "Supplements each pitcher with real season stats from the statcast_player_stats data layer",
+      "Each pitcher includes: role, availability status, freshness, days since last appearance, recent pitch counts",
+      "Each pitcher includes: platoon splits (vs LHB and RHB wOBA), ERA, FIP, K%, BB%",
+      "Each pitcher includes: current warm-up state",
+      "Pitchers already used and removed are excluded"
     ]
   },
   {
     "category": "tool",
     "name": "get_pitcher_fatigue_assessment",
-    "status": "passing",
-    "description": "Assesses the current pitcher's fatigue based on in-game trends: velocity changes, spin rate decline, batted ball quality trend, pitch count, times through order, and an overall fatigue rating.",
+    "passing": false,
+    "description": "Assesses the current pitcher's fatigue based on in-game trends from the live game feed: velocity changes, spin rate decline, batted ball quality trend, pitch count, times through order, and an overall fatigue rating.",
     "steps": [
       "Accepts a pitcher identifier (defaults to current pitcher if omitted)",
+      "Uses in-game data from the live game feed (passed via game state or fetched from MLB Stats API)",
       "Returns velocity change from first inning to most recent inning",
       "Returns spin rate change from first inning to most recent inning",
-      "Returns batted ball quality trend (average exit velocity against, by inning)",
-      "Returns current pitch count and pitch count by inning",
-      "Returns times through order and wOBA allowed per time through",
+      "Returns pitch count and pitch count by inning",
+      "Returns times through order and historical TTO penalty data",
       "Returns an overall fatigue level rating (fresh, normal, fatigued, gassed)",
-      "Returns an error if the player identifier is invalid or the pitcher is not in the current game"
+      "Returns an error if the pitcher is not in the current game"
     ]
   },
   {
     "category": "tool",
     "name": "get_defensive_positioning",
-    "status": "passing",
-    "description": "Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Includes spray chart summary, infield-in cost/benefit, and shift recommendations.",
+    "passing": false,
+    "description": "Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Uses the batter's real spray chart data from Statcast.",
     "steps": [
       "Accepts batter identifier, pitcher identifier, and current game situation (outs, runners, score, inning)",
-      "Returns the batter's spray chart summary (pull%, center%, oppo% for groundballs and flyballs)",
+      "Fetches the batter's real spray chart data from Statcast (pull%, center%, oppo% for groundballs and flyballs)",
       "Returns recommended infield positioning (standard, in, double-play depth, shift direction)",
       "Returns recommended outfield positioning (standard, shallow, deep, shaded direction)",
       "Returns infield-in cost/benefit analysis (expected runs saved at home vs extra hits allowed)",
-      "Returns shift recommendation within current MLB rule constraints (2 infielders each side of 2nd base)",
+      "Recommendations comply with current MLB infield positioning rules (2 infielders each side of 2nd base)",
       "Returns an error if either player identifier is invalid"
     ]
   },
   {
     "category": "tool",
     "name": "get_defensive_replacement_value",
-    "status": "passing",
-    "description": "Evaluates the net value of a defensive substitution by comparing the defensive upgrade against the offensive downgrade, scaled by estimated innings remaining.",
+    "passing": false,
+    "description": "Evaluates the net value of a defensive substitution by comparing the defensive upgrade against the offensive downgrade, scaled by estimated innings remaining. Uses real defensive metrics from Statcast.",
     "steps": [
       "Accepts the current fielder identifier and the potential replacement identifier",
       "Accepts the fielding position for the substitution",
-      "Returns the defensive upgrade in OAA (Outs Above Average) or DRS difference",
+      "Fetches real defensive metrics (OAA, DRS) from Statcast for both players at the specified position",
+      "Returns the defensive upgrade in OAA or DRS difference",
       "Returns the offensive downgrade in projected wOBA or wRC+",
       "Returns estimated innings remaining based on current game state",
       "Returns net expected value of the substitution (defensive gain minus offensive cost)",
@@ -192,11 +293,11 @@
   {
     "category": "tool",
     "name": "get_platoon_comparison",
-    "status": "passing",
-    "description": "Compares a potential pinch hitter against the current batter for the active matchup. Returns projected wOBA for each, platoon advantage delta, defensive cost, and bench depth impact.",
+    "passing": false,
+    "description": "Compares a potential pinch hitter against the current batter for the active matchup. Returns projected wOBA for each, platoon advantage delta, defensive cost, and bench depth impact. Uses real stats from Statcast/FanGraphs.",
     "steps": [
-      "Accepts the current batter identifier and the potential pinch hitter identifier",
-      "Accepts the current pitcher identifier for matchup context",
+      "Accepts the current batter identifier, potential pinch hitter identifier, and current pitcher identifier",
+      "Fetches real platoon split stats for both batters from Statcast/FanGraphs",
       "Returns projected wOBA vs the current pitcher for each batter",
       "Returns the platoon advantage delta between the two batters",
       "Returns the defensive cost of the substitution (current fielder vs replacement's defensive ability)",
@@ -205,373 +306,167 @@
     ]
   },
   {
-    "category": "architecture",
-    "name": "claude_agent_sdk",
-    "description": "The application is built on the Claude Agent SDK. The agent SDK manages the tool-use loop, sending the game state to Claude, dispatching tool calls for information gathering, and receiving the agent's decision as structured output.",
-    "steps": [
-      "The agent is instantiated using the Claude Agent SDK client",
-      "All 12 information-gathering tools are registered as SDK tool definitions with proper input schemas",
-      "The SDK manages the conversation loop: sending the game scenario to Claude and processing tool-use responses for information gathering",
-      "The agent's system prompt instructs it to act as a baseball manager that gathers context via tools and responds with decisions",
-      "Tool call results are returned to the agent via the SDK's tool result mechanism",
-      "The agent can call multiple tools in a single turn to gather all needed context",
-      "After the agent has gathered sufficient context, it produces a structured ManagerDecision as its final response",
-      "The SDK handles retries and error formatting when the agent makes an invalid tool call",
-      "The agent session persists across the entire game so it retains context of prior decisions"
-    ]
-  },
-  {
-    "category": "architecture",
-    "name": "single_file_uv_scripts",
-    "description": "All Python scripts are single-file UV executables. Each script includes an inline metadata block specifying its dependencies so it can be run directly with 'uv run script.py' without a separate requirements file or virtual environment setup.",
-    "steps": [
-      "Each .py file begins with a PEP 723 inline metadata block (/// script) declaring its dependencies",
-      "Scripts can be executed directly via 'uv run <script>.py' with no prior install step",
-      "No requirements.txt, pyproject.toml, or setup.py is needed to run the application",
-      "All dependencies including the Claude Agent SDK (anthropic or claude-agent-sdk) are declared inline",
-      "Scripts are self-contained: a single file contains all logic for its purpose",
-      "The main entry point script can be run with 'uv run game.py' to start a full game simulation"
-    ]
-  },
-  {
     "category": "functional",
-    "name": "agent_decision_loop",
-    "status": "passing",
-    "description": "The core game loop that presents the current game state to the Claude agent at each decision point, allows it to gather context via tools, receives its decision as structured output, and advances the simulation accordingly.",
+    "name": "game_state_ingestion",
+    "passing": false,
+    "description": "The external service pushes a game state JSON payload to the agent before each at-bat. This feature handles parsing the MLB Stats API live game feed response into the agent's input models (MatchupState, RosterState, OpponentRosterState).",
     "steps": [
-      "At each decision point, the agent is prompted with the MatchupState, RosterState, OpponentRosterState, and a natural language description of what decision is needed",
-      "The agent may call zero or more information-gathering tools (get_batter_stats, get_win_probability, get_pitcher_fatigue_assessment, etc.) to build analytical context",
-      "After gathering context, the agent responds with a structured ManagerDecision (decision type, action details, reasoning, confidence, alternatives considered)",
-      "The simulation engine validates the ManagerDecision against current game state and MLB rules",
-      "If the decision is valid, the simulation applies it and advances to the next decision point",
-      "If the decision is invalid (e.g., violates 3-batter minimum, references unavailable player), an error is returned and the agent is asked to decide again",
-      "Decision points include: pre-game lineup, each plate appearance (offensive and defensive situations), between-inning transitions, and replay challenge opportunities",
-      "The loop repeats until the game reaches a terminal state (final out of regulation or extras)",
-      "The opposing team's decisions are handled by a separate mechanism (second agent, automated, or scripted)"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "game_simulation_engine",
-    "status": "passing",
-    "description": "The baseball simulation engine that resolves play outcomes based on player attributes, situational context, and probability distributions. It maintains the authoritative game state, enforces all baseball rules, and applies the agent's decisions.",
-    "steps": [
-      "Simulates outcomes at the pitch level: each event is a single pitch resulting in a ball, strike, foul, or ball in play",
-      "Ball-in-play outcomes are resolved based on batter and pitcher attributes (hit type, direction, velocity)",
-      "Baserunner advancement is resolved realistically based on hit type, runner speed, and fielder arms",
-      "The simulation enforces all standard MLB rules (3 strikes, 4 balls, 3 outs, 9 innings, force plays, tag plays)",
-      "The simulation applies the agent's ManagerDecision to the game state (substitutions, positioning changes, strategic plays like steal or bunt attempts)",
-      "Extra innings are played if the game is tied after 9 innings",
-      "The simulation tracks all statistics for the box score (hits, runs, errors, strikeouts, walks, etc.)",
-      "Pitcher fatigue is modeled: effectiveness degrades as pitch count increases",
-      "Defensive positioning choices from the agent's decisions modify outcome probabilities",
-      "The simulation produces a play-by-play event description for each resolved event",
-      "Random outcomes use seeded randomness so games can be replayed deterministically"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "player_data_model",
-    "description": "Player and roster data is structured with attributes that feed into the simulation engine. Each player has ratings and statistics that influence play outcome probabilities.",
-    "steps": [
-      "Each player has a unique identifier, name, primary position, and handedness (L/R/S)",
-      "Batters have attributes for contact, power, speed, eye (plate discipline), and batting average vs L/R",
-      "Pitchers have attributes for stuff, control, stamina, velocity, and ERA vs L/R",
-      "Fielders have attributes for range, arm strength, and error rate at each position they can play",
-      "Catchers have an additional arm strength rating for throwing out baserunners",
-      "Player attributes can be sourced from a JSON data file or generated synthetically for testing",
-      "A full 26-man roster is defined for each team (starting 9, bench, bullpen)",
-      "Each roster has at minimum 5 bench players and 8 bullpen pitchers to support realistic substitutions"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "game_initialization",
-    "description": "A game is initialized with two teams, their rosters, and configuration options. The home/away designation determines batting order. The agent is assigned to manage one team.",
-    "steps": [
-      "Accepts two team rosters and a designation of which team the agent manages",
-      "The away team bats in the top of each inning; the home team bats in the bottom",
-      "The agent is prompted with a pre-game scenario to decide its lineup (batting order and defensive positions) via a ManagerDecision response",
-      "The opposing team's lineup is set automatically or by a second agent",
-      "Configuration options include: DH rule on/off, random seed, and opponent difficulty",
-      "The initial game state is created with score 0-0, top of the 1st, 0 outs",
-      "All bullpen pitchers start in the cold state",
-      "Each team starts with one manager challenge available"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "game_completion",
-    "status": "passing",
-    "description": "The game ends when a winner is determined according to MLB rules. A final summary is produced including the box score, key decisions, and game narrative.",
-    "steps": [
-      "The game ends after the bottom of the 9th if the home team is ahead",
-      "The game ends after the top of the 9th if the away team is ahead and the home team fails to tie or take the lead in the bottom of the 9th",
-      "If tied after 9 innings, extra innings are played until one team leads at the end of a complete inning",
-      "The bottom of an inning is skipped if the home team is already ahead (walk-off scenario handled correctly)",
-      "A walk-off hit, walk, or error correctly ends the game immediately with only the winning run scoring",
-      "After the final out, a box score is printed with lines, hits, runs, and errors for each inning",
-      "A summary of key managerial decisions made during the game is printed",
-      "The final game state is returned to the caller with the complete play-by-play log"
+      "Accept a raw game state JSON payload (either MLB Stats API format or a pre-parsed intermediate format)",
+      "Parse the payload into MatchupState, RosterState, and OpponentRosterState Pydantic models",
+      "Map MLB Stats API player IDs to the fields expected by each model",
+      "Populate pitcher in-game stats from the live feed (pitch count, batters faced, times through order, today's line)",
+      "Populate runner data (sprint speed, SB success rate) by cross-referencing with Statcast data",
+      "Populate bullpen availability and freshness from the game feed and recent game logs",
+      "Populate bench availability based on substitution history in the current game",
+      "Track mound visits remaining and replay challenge availability",
+      "Validate the parsed models and return clear errors for missing or invalid data"
     ]
   },
   {
     "category": "functional",
     "name": "agent_system_prompt",
-    "description": "The system prompt provided to the Claude agent instructs it to act as a baseball manager. It explains the tools available for gathering context, the structured output format for decisions, and how to reason about game situations.",
+    "passing": false,
+    "description": "The system prompt provided to the Claude agent instructs it to act as a baseball manager for a specific team. It explains the tools available, the analytical framework, MLB rules, and the expected plain-text output format.",
     "steps": [
-      "The system prompt establishes the agent's role as the manager of a specific team",
-      "It lists all available information-gathering tools with brief descriptions of when to use each one",
-      "It instructs the agent to consider game situation factors: inning, score differential, outs, runners, matchups",
-      "It encourages the agent to gather information (stats, matchups, bullpen status, win probability) before making key decisions",
-      "It explains that the agent expresses decisions via the ManagerDecision structured output format, not by calling action tools",
-      "It describes the full range of possible decisions: no action needed, pitching changes, pinch hitting, stolen base, bunt, defensive positioning, intentional walk, mound visit, replay challenge, etc.",
-      "It explains the consequences of substitutions (players removed cannot return)",
-      "It notes MLB rules that constrain decisions (3-batter minimum, mound visit limits, infield positioning rules)",
-      "The system prompt is stored in a separate markdown file (AGENT_PROMPT.md) and loaded at runtime"
+      "Establish the agent's identity as the manager of a specific MLB team",
+      "List all 12 available tools with brief descriptions of when to use each one",
+      "Instruct the agent to assess the situation and determine whether action is needed before calling tools",
+      "Embed key analytical constants (TTO penalty, platoon splits, breakeven rates, leverage index thresholds)",
+      "Include all MLB rules that constrain decisions (3-batter minimum, mound visits, positioning rules, etc.)",
+      "Instruct the agent that its output is plain-text describing the decision, suitable for tweeting",
+      "Explain that most at-bats require no action and the agent should only make active decisions when the situation warrants it",
+      "Note that players removed from the game cannot return",
+      "Store the system prompt in a separate markdown file (AGENT_PROMPT.md) loaded at runtime"
     ]
   },
   {
     "category": "functional",
-    "name": "play_by_play_output",
-    "description": "The simulation produces human-readable play-by-play output as the game progresses, narrating each event so a user can follow the game and the agent's decisions in real time.",
+    "name": "agent_decision_engine",
+    "passing": false,
+    "description": "The core decision function. Receives a parsed game state, sends it to the Claude agent with the system prompt and tools, and returns the agent's plain-text decision. This is a single-shot invocation per at-bat, not a persistent game loop.",
     "steps": [
-      "Each pitch outcome is logged (ball, called strike, swinging strike, foul, in play)",
-      "Each ball-in-play outcome is narrated (groundout to short, single to left, fly out to center, etc.)",
-      "Scoring plays are highlighted with the updated score",
-      "Managerial decisions are announced when they occur (pitching change, pinch hitter, steal attempt, etc.)",
-      "Inning transitions are clearly marked (Top/Bottom of the Nth)",
-      "The output is printed to stdout in real time as the game progresses",
-      "The complete play-by-play log is available at game end (full log)"
+      "Accept MatchupState, RosterState, and OpponentRosterState as input",
+      "Format the game state as a natural-language scenario description for the agent",
+      "Send the scenario to the Claude agent with all 12 tools registered",
+      "The agent may call zero or more tools to gather analytical context",
+      "The agent produces a plain-text response: either 'no action' or an active decision with reasoning",
+      "Return the agent's response along with metadata (tools called, token usage)",
+      "Handle agent errors gracefully: if the agent fails to produce a valid response after retries, return a safe 'no action' default"
     ]
   },
   {
     "category": "functional",
-    "name": "opponent_manager",
-    "description": "The opposing team needs a decision-making mechanism. This can be a second Claude agent, a rules-based automated manager, or a passthrough that lets the opposing team play without strategic intervention.",
+    "name": "decision_output",
+    "passing": false,
+    "description": "Formats the agent's decision for output. Active decisions are formatted as tweet-ready text. All decisions (active and no-action) are logged for analysis.",
     "steps": [
-      "At minimum, a simple automated opponent is provided that makes basic decisions (pull tired pitchers, no strategic plays)",
-      "The automated opponent uses simple heuristics: pitching change when pitch count exceeds a threshold, no bunts or steals",
-      "Optionally, a second Claude agent can manage the opposing team using the same tool and structured output interface",
-      "When two agents are used, each only has access to tools for their own team's data",
-      "The opponent mechanism is configurable at game initialization",
-      "The opponent's decisions are logged in the play-by-play output the same way the agent's decisions are"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "error_handling",
-    "status": "passing",
-    "description": "When the agent makes an invalid tool call or returns an invalid decision, the system returns a clear error message and allows the agent to try again without advancing the game state.",
-    "steps": [
-      "Invalid tool calls return a descriptive error message explaining why the call was rejected",
-      "Invalid ManagerDecision responses (e.g., referencing unavailable player, violating MLB rules) return an error and prompt the agent to decide again",
-      "The game state is not modified by a failed tool call or rejected decision",
-      "The agent is allowed to retry with a corrected call or decision",
-      "Repeated invalid responses (more than 5 consecutive failures) trigger a forced no-action to prevent infinite loops",
-      "Errors are logged but not included in the play-by-play output",
-      "Common error scenarios are covered: unavailable player, rule violation, invalid parameters, malformed output"
+      "If the agent made an active decision, extract the tweet-ready portion of the response",
+      "Ensure the tweet text fits within ~280 characters (truncate or summarize if needed)",
+      "Include game context in the tweet (inning, situation, teams)",
+      "For no-action responses, format a brief log entry but do not produce tweet output",
+      "Return both the tweet text (if applicable) and the full reasoning (for logging)"
     ]
   },
   {
     "category": "functional",
     "name": "decision_logging",
-    "description": "Every agent decision is logged with full context so that games can be analyzed after the fact. This enables evaluating the agent's managerial quality and debugging poor decisions.",
+    "passing": true,
+    "description": "Every agent invocation is logged with full context so decisions can be analyzed after the fact. Enables evaluating the agent's managerial quality and debugging decisions.",
     "steps": [
-      "Each decision log entry includes the game situation at the time of the decision (inning, score, outs, runners, count)",
-      "The entry includes which information-gathering tools the agent called and with what parameters",
-      "The entry includes the full ManagerDecision response (decision type, action details, reasoning, confidence, alternatives considered)",
-      "The entry includes the tool results the agent received before deciding",
-      "The decision log is written to a structured JSON file alongside the play-by-play",
-      "The log can be reviewed after the game to evaluate decision quality",
-      "Timestamps are included for measuring agent response latency"
+      "Each log entry includes the game state at the time of the decision (inning, score, outs, runners, batter/pitcher)",
+      "The entry includes which tools the agent called and with what parameters",
+      "The entry includes the tool results the agent received",
+      "The entry includes the agent's full response (decision text and reasoning)",
+      "The entry includes whether the decision was active or no-action",
+      "The entry includes token usage and latency",
+      "Logs are written to structured JSON files organized by game (one file per game)",
+      "Timestamps are included for correlating with the live game timeline"
     ]
   },
   {
     "category": "functional",
-    "name": "rules_enforcement",
-    "description": "The simulation enforces MLB rules when validating and applying the agent's ManagerDecision. These are cross-cutting rules that involve multiple game state elements.",
+    "name": "error_handling",
+    "passing": false,
+    "description": "Handles failures gracefully across the system: MLB API errors, Statcast data unavailability, Claude API rate limits, invalid game state inputs, and tool execution failures.",
     "steps": [
-      "A pitcher must face at least three batters before being removed (three-batter minimum rule), unless the inning ends or the pitcher is injured",
-      "A player removed from the game cannot re-enter for any reason",
-      "The DH is forfeited if the DH enters the field defensively or the pitcher enters the batting order",
-      "A team cannot make a substitution that leaves them with no available players at a required position",
-      "Mound visit limits per game are enforced (5 per 9-inning game, 1 additional per extra inning)",
-      "A second mound visit to the same pitcher in the same inning requires a pitching change",
-      "The pitcher who starts an inning must face at least one batter (no pre-inning pitching changes without cause)",
-      "Infield positioning must comply with current rules (2 infielders on each side of 2nd base, all on dirt)"
+      "MLB Stats API failures (connection errors, timeouts, 404s) return clear error messages without crashing",
+      "Statcast/pybaseball data unavailability falls back to reduced-context decisions (agent decides with fewer stats)",
+      "Claude API rate limits (429) trigger exponential backoff retry",
+      "Invalid game state inputs are rejected with validation errors before reaching the agent",
+      "Tool execution failures return error responses to the agent so it can decide without that tool's data",
+      "Repeated agent failures (>3 retries) fall back to a safe 'no action' response",
+      "All errors are logged with context for debugging"
     ]
   },
   {
-    "category": "technical",
-    "name": "context_window_management",
-    "description": "A full baseball game involves hundreds of pitches and dozens of decisions. The agent's conversation history will grow large. The system must manage context to stay within the model's token limits without losing critical game awareness.",
+    "category": "functional",
+    "name": "live_game_feed_service",
+    "passing": false,
+    "description": "The external service that polls the MLB Stats API live game feed, detects new at-bats, and invokes the agent. This is the orchestrator that drives the agent during a live game.",
     "steps": [
-      "The game state summary sent to the agent each turn is compact and self-contained (not relying on prior messages for current situation)",
-      "The system uses conversation summarization or truncation to keep the context window within limits",
-      "Critical context is preserved: current game state, roster status, bullpen status, and recent events",
-      "Older play-by-play details are pruned or summarized when the context grows too large",
-      "The agent can always reconstruct the full current situation from the latest game state prompt plus its tools",
-      "Token usage is tracked per turn and cumulatively for the game",
-      "If the context limit is approached, a summarization step is inserted before the next agent turn"
+      "Accept a gamePk (MLB game ID) and the team the agent manages",
+      "Poll the MLB Stats API live game feed at a configurable interval (default 10 seconds)",
+      "Detect when a new at-bat begins by comparing the current play index to the previous poll",
+      "When a new at-bat is detected, parse the game state and invoke the agent",
+      "If the agent returns an active decision, format it as a tweet and output it",
+      "Continue polling until the game reaches a final state",
+      "Handle game delays, rain delays, and the feed going temporarily unavailable without crashing",
+      "Log all agent invocations and decisions throughout the game"
     ]
   },
   {
-    "category": "technical",
-    "name": "structured_tool_responses",
-    "description": "All tool responses return structured data in a consistent JSON format so the agent can reliably parse and reason about the information. Human-readable descriptions are included alongside the structured data.",
+    "category": "functional",
+    "name": "tweet_integration",
+    "passing": false,
+    "description": "Posts the agent's active decisions to Twitter/X during live games. Connects the decision output to the Twitter API.",
     "steps": [
-      "Every tool returns a JSON object with a consistent top-level structure (success/error status, data payload)",
-      "Numeric values use consistent units and formats (e.g., batting average as 0.300 not .300)",
-      "Player references always include both the identifier and display name",
-      "Error responses include an error code and a human-readable message",
-      "Lists (e.g., baserunners, roster) use consistent array formats",
-      "The response format is documented in each tool's schema so the agent can reference it"
-    ]
-  },
-  {
-    "category": "technical",
-    "name": "api_rate_limit_handling",
-    "description": "The Claude API has rate limits on requests and tokens. The system must handle rate limit responses gracefully, backing off and retrying without losing game state or agent context.",
-    "steps": [
-      "Rate limit (429) responses from the API trigger an exponential backoff retry",
-      "Game state is not advanced during a retry wait",
-      "The retry mechanism is transparent to the game flow; the game resumes normally after the retry succeeds",
-      "A maximum retry count is enforced to avoid infinite retry loops",
-      "Rate limit events are logged with timestamps for debugging",
-      "The system respects the Retry-After header if provided in the API response"
-    ]
-  },
-  {
-    "category": "technical",
-    "name": "deterministic_replay",
-    "description": "Games can be replayed deterministically by providing the same random seed. This allows debugging agent behavior, comparing different agent prompts against the same game, and regression testing.",
-    "steps": [
-      "The simulation engine accepts an optional random seed parameter",
-      "With the same seed, the same sequence of simulation outcomes is produced regardless of agent decisions",
-      "Agent decisions are the only variable; the underlying pitch/hit/error randomness is fixed by the seed",
-      "The seed is logged at game start so any game can be replayed later",
-      "Without a seed, the system generates one randomly and logs it"
-    ]
-  },
-  {
-    "category": "technical",
-    "name": "game_state_persistence",
-    "description": "The full game state can be serialized to disk and resumed later. This supports long games, debugging, and reviewing agent decisions after the fact.",
-    "steps": [
-      "The complete game state (score, inning, rosters, play-by-play, substitution history, etc.) is serializable to JSON",
-      "A save function writes the current game state to a JSON file",
-      "A load function restores a game from a saved JSON file and resumes the agent loop",
-      "The agent conversation history is not persisted (it is reconstructed from game state on resume)",
-      "The saved file includes the random seed and the current position in the random sequence",
-      "Save files include a version identifier for forward compatibility"
+      "Accept tweet-ready text from the decision output module",
+      "Post the tweet via the Twitter/X API (using tweepy or similar library)",
+      "Include relevant hashtags or game context (team names, inning)",
+      "Handle Twitter API rate limits and errors gracefully",
+      "Log all posted tweets with timestamps and tweet IDs",
+      "Support a dry-run mode that logs tweets without posting them (for testing)"
     ]
   },
   {
     "category": "technical",
     "name": "input_validation_layer",
-    "description": "All tool inputs are validated against their schemas before reaching the data layer. This ensures tools never receive malformed parameters and provides clear feedback to the agent.",
+    "passing": false,
+    "description": "All tool inputs are validated against their schemas before execution. Game state inputs are validated before reaching the agent. This ensures clear error messages for invalid data.",
     "steps": [
-      "Each tool has a defined input schema with required and optional parameters and their types",
-      "Parameters are type-checked (string, integer, enum) before processing",
-      "Enum parameters (e.g., vs_hand: L/R, recency_window) reject values outside the allowed set",
-      "Player identifiers are validated against the current roster before any data lookup executes",
+      "Each tool has a Pydantic input model with required and optional parameters",
+      "Parameters are type-checked before processing",
+      "Enum parameters (vs_hand: L/R, recency_window) reject invalid values",
+      "Player identifiers are validated as valid MLB player IDs",
+      "Game state inputs are validated against the MatchupState/RosterState/OpponentRosterState schemas",
       "Validation errors include which parameter failed and what was expected"
     ]
   },
   {
-    "category": "functional",
-    "name": "mlb_stats_api_rosters",
-    "description": "Fetch real MLB rosters from the MLB Stats API (statsapi.mlb.com) so the agent can manage games with actual current-season players. Replaces the static sample_rosters.json with live 40-man and 26-man active roster data, including player metadata, positions, handedness, and status.",
+    "category": "technical",
+    "name": "structured_tool_responses",
+    "passing": false,
+    "description": "All tool responses use a consistent JSON format so the agent can reliably parse and reason about the data.",
     "steps": [
-      "Add the mlb-statsapi Python package (or use raw HTTP requests to statsapi.mlb.com/api/v1) as an inline dependency",
-      "Implement a data/fetch_rosters.py script that accepts a team name or MLB team ID and fetches the current 26-man active roster",
-      "Map MLB Stats API player fields to the existing Player/Batter/Pitcher/Fielder Pydantic models (name, position, handedness, jersey number)",
-      "Fetch and populate pitcher handedness (throws L/R) and batter handedness (bats L/R/S) from the API person endpoint",
-      "For each rostered player, fetch their primary and secondary fielding positions from the API",
-      "Write the fetched roster to a JSON file in data/ following the same schema as sample_rosters.json so existing tools can consume it without changes",
-      "Support fetching rosters for a specific date (historical rosters) via the API's date parameter",
-      "Handle API errors gracefully: connection failures, invalid team IDs, and off-season empty rosters return clear error messages",
-      "Add a --team flag to game.py that triggers a live roster fetch instead of loading sample_rosters.json"
+      "Every tool returns a JSON object with a consistent top-level structure (success/error status, data payload)",
+      "Numeric values use consistent units and formats (e.g., batting average as 0.300)",
+      "Player references include both the MLB player ID and display name",
+      "Error responses include an error code and a human-readable message",
+      "When data is unavailable for a field, the field is present with a null value and an explanation, not omitted"
     ]
   },
   {
-    "category": "functional",
-    "name": "statcast_player_stats",
-    "description": "Integrate pybaseball to fetch real Statcast and FanGraphs player statistics, replacing the synthetic stat derivation in get_batter_stats and get_pitcher_stats. Uses Baseball Savant and FanGraphs as the upstream data sources for season stats, splits, advanced metrics, and pitch-level data.",
+    "category": "technical",
+    "name": "api_rate_limit_handling",
+    "passing": false,
+    "description": "Handles rate limits from both the Claude API and external data APIs (MLB Stats API, Statcast/FanGraphs via pybaseball). Uses exponential backoff and respects Retry-After headers.",
     "steps": [
-      "Add pybaseball as an inline dependency in the relevant tool scripts",
-      "In get_batter_stats, replace the attribute-derived stat formulas with real season stats fetched via pybaseball.batting_stats() or pybaseball.playerid_lookup() + pybaseball.statcast_batter()",
-      "Fetch real traditional stats (AVG, OBP, SLG, OPS), advanced metrics (wOBA, wRC+, barrel rate, xwOBA), plate discipline (K%, BB%, chase rate, whiff rate), and batted ball profile (GB%, pull%, exit velocity, launch angle) from Statcast/FanGraphs",
-      "In get_pitcher_stats, replace attribute-derived formulas with real stats via pybaseball.pitching_stats() or pybaseball.statcast_pitcher()",
-      "Fetch real pitch mix data from Statcast: per-pitch-type velocity, spin rate, movement, and whiff rate",
-      "Support split queries (vs LHB/RHB, home/away) using pybaseball's splits functionality or by filtering Statcast data",
-      "Implement a local cache layer (JSON files in data/cache/) so repeated lookups for the same player and season do not re-fetch from the network",
-      "Cache entries expire after 24 hours to balance freshness with rate-limit friendliness",
-      "Fall back to the existing synthetic stat derivation if the network fetch fails or the player is not found in Statcast (e.g., minor leaguers)"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "retrosheet_run_expectancy",
-    "description": "Compute run expectancy matrices and win probability tables from real Retrosheet play-by-play event files. Replaces the hard-coded RE24 matrix and simple win probability formula with empirically derived values from actual MLB game data.",
-    "steps": [
-      "Add a data/compute_re_matrix.py script that downloads and parses Retrosheet event files for a configurable range of seasons",
-      "Parse Retrosheet .EVA/.EVN event files to extract play-by-play state transitions (base-out state before and after each event, runs scored)",
-      "Compute the 24-state run expectancy matrix (8 base states x 3 out states) by averaging runs scored from each state to end of inning across all parsed games",
-      "Compute win probability tables indexed by (inning, half, outs, base state, score differential) from the parsed game outcomes",
-      "Compute leverage index values for each game state from the win probability table",
-      "Write the computed matrices to JSON lookup files in data/ (re_matrix.json, win_probability.json, leverage_index.json)",
-      "Update get_run_expectancy to load from data/re_matrix.json instead of the hard-coded dictionary",
-      "Update get_win_probability to load from data/win_probability.json instead of the algorithmic approximation",
-      "Include pre-computed tables for the 2019-2023 seasons in the repository so the tool works without running the computation script",
-      "The computation script is idempotent and can be re-run to update tables when new seasons of Retrosheet data become available"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "live_game_feed",
-    "description": "Connect to the MLB Stats API live game feed (statsapi.mlb.com/api/v1.1/game/{gamePk}/feed/live) to ingest real-time game state for a game in progress. This allows the agent to manage decisions for an actual live MLB game rather than a simulated one.",
-    "steps": [
-      "Implement a data/live_feed.py module that accepts a gamePk (MLB game ID) and polls the live feed endpoint",
-      "Parse the live feed JSON to extract current game state: inning, half, outs, runners on base, score, current batter, current pitcher, count, and last play result",
-      "Map the live feed's player IDs to the roster data fetched via mlb_stats_api_rosters so tools can look up the correct players",
-      "Convert the live feed game state into the existing MatchupState, RosterState, and OpponentRosterState Pydantic models",
-      "Detect decision points from the live feed: pitching changes, pinch hitter opportunities, steal situations, defensive alignment moments",
-      "Add a --live flag to game.py that accepts a gamePk and switches from simulation mode to live advisory mode",
-      "In live advisory mode, the agent observes the real game state and outputs what decisions it would make at each decision point, without controlling the simulation",
-      "Poll the live feed at a configurable interval (default 10 seconds) to detect state changes",
-      "Handle game delays, rain delays, and the feed going temporarily unavailable without crashing"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "historical_game_scenarios",
-    "description": "Load real historical game situations from the MLB Stats API or Retrosheet to test the agent against actual past decision points. This enables evaluating agent decision quality by comparing its choices to what real managers did in the same situations.",
-    "steps": [
-      "Implement a data/load_scenario.py script that accepts a gamePk and an inning/event index to load a specific historical game state",
-      "Fetch the full play-by-play for a completed game from the MLB Stats API (game/{gamePk}/feed/live endpoint works for historical games too)",
-      "Extract the game state at a given event index: rosters, lineups, bullpen usage, score, inning, outs, runners, pitch counts, substitution history up to that point",
-      "Convert the extracted state into MatchupState, RosterState, and OpponentRosterState models for the agent",
-      "Include a curated set of 20+ notable historical decision points in data/scenarios/ as pre-fetched JSON files (e.g., famous bullpen decisions, pinch-hit situations, late-game steal attempts)",
-      "Add a --scenario flag to game.py that loads a historical scenario and asks the agent for its decision at that point",
-      "After the agent decides, display what the real manager actually did and the outcome for comparison",
-      "Support batch evaluation: run the agent against all curated scenarios and produce a summary report of agreement/disagreement with real manager decisions",
-      "Scenarios include metadata: date, teams, manager names, game significance (regular season, playoff, World Series)"
-    ]
-  },
-  {
-    "category": "functional",
-    "name": "batter_vs_pitcher_history",
-    "description": "Fetch real batter-vs-pitcher matchup history from Baseball Reference or the MLB Stats API to replace the synthetic matchup data in get_matchup_data. Provides actual career head-to-head plate appearance results.",
-    "steps": [
-      "Use pybaseball or the MLB Stats API endpoint (people/{playerId}/stats?stats=vsPlayer&opposingPlayerId={pitcherId}) to fetch real career matchup data",
-      "Retrieve career plate appearances, at-bats, hits, doubles, triples, home runs, walks, strikeouts, batting average, slugging, and OPS for the matchup",
-      "Update get_matchup_data to use real matchup history when available instead of the deterministic hash-based synthetic data",
-      "When the real matchup has fewer than 10 plate appearances, supplement with the existing similarity-model projection",
-      "Implement caching for matchup lookups in data/cache/matchups/ to avoid redundant API calls during a single game",
-      "Handle cases where one or both players have no MLB history (rookies, minor leaguers) by falling back to the synthetic approach",
-      "Return the same JSON response schema as the current get_matchup_data so the agent's interpretation logic does not need to change"
+      "Claude API rate limit (429) responses trigger exponential backoff retry with jitter",
+      "MLB Stats API rate limits are handled with backoff and reduced polling frequency",
+      "pybaseball/FanGraphs rate limits are mitigated by the data caching layer",
+      "A maximum retry count is enforced to avoid infinite retry loops",
+      "Rate limit events are logged with timestamps",
+      "The system respects Retry-After headers when provided"
     ]
   }
 ]

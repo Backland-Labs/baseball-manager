@@ -243,7 +243,7 @@ def _peek_validate(game_state: GameState, decision: dict,
 # ---------------------------------------------------------------------------
 
 def _call_agent(client: Anthropic, messages: list[dict],
-                verbose: bool = True) -> tuple[dict, object | None]:
+                verbose: bool = True) -> tuple[dict, object | None, dict]:
     """Send messages to the Claude agent and extract a ManagerDecision.
 
     Args:
@@ -252,8 +252,13 @@ def _call_agent(client: Anthropic, messages: list[dict],
         verbose: Print agent activity.
 
     Returns:
-        Tuple of (decision_dict, final_message).
+        Tuple of (decision_dict, final_message, call_metadata).
+        call_metadata contains tool_calls, token_usage, and agent_turns.
     """
+    tool_calls: list[dict] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
+
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
         runner = client.beta.messages.tool_runner(
@@ -269,12 +274,22 @@ def _call_agent(client: Anthropic, messages: list[dict],
     final_message = None
     for message in runner:
         turn += 1
+        # Accumulate token usage from each message
+        if hasattr(message, "usage") and message.usage:
+            total_input_tokens += getattr(message.usage, "input_tokens", 0)
+            total_output_tokens += getattr(message.usage, "output_tokens", 0)
+
         for block in message.content:
-            if block.type == "tool_use" and verbose:
-                args_str = json.dumps(block.input, separators=(",", ":"))
-                if len(args_str) > 80:
-                    args_str = args_str[:80] + "..."
-                print(f"    [Agent] Tool: {block.name}({args_str})")
+            if block.type == "tool_use":
+                tool_calls.append({
+                    "tool_name": block.name,
+                    "tool_input": block.input,
+                })
+                if verbose:
+                    args_str = json.dumps(block.input, separators=(",", ":"))
+                    if len(args_str) > 80:
+                        args_str = args_str[:80] + "..."
+                    print(f"    [Agent] Tool: {block.name}({args_str})")
             elif block.type == "text" and block.text.strip() and verbose:
                 text = block.text.strip()
                 if len(text) > 150:
@@ -302,13 +317,23 @@ def _call_agent(client: Anthropic, messages: list[dict],
             "risks": [],
         }
 
-    return decision_dict, final_message
+    call_metadata = {
+        "tool_calls": tool_calls,
+        "token_usage": {
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_input_tokens + total_output_tokens,
+        },
+        "agent_turns": turn,
+    }
+
+    return decision_dict, final_message, call_metadata
 
 
 def run_agent_decision(client: Anthropic, game_state: GameState,
                        managed_team: str, messages: list[dict],
                        verbose: bool = True,
-                       max_retries: int = 5) -> tuple[dict, list[dict]]:
+                       max_retries: int = 5) -> tuple[dict, list[dict], dict]:
     """Present the current game state to the agent and get a ManagerDecision.
 
     If the agent's decision is invalid, it is re-prompted with the error
@@ -324,9 +349,17 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
         max_retries: Maximum number of retry attempts for invalid decisions.
 
     Returns:
-        Tuple of (decision_dict, updated_messages).
+        Tuple of (decision_dict, updated_messages, decision_metadata).
+        decision_metadata contains tool_calls, token_usage, latency_ms,
+        and retries.
     """
     from simulation import validate_and_apply_decision as _validate
+
+    start_time = time.time()
+    all_tool_calls: list[dict] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_agent_turns = 0
 
     scenario = game_state_to_scenario(game_state, managed_team)
 
@@ -341,19 +374,17 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
     messages.append({"role": "user", "content": user_message})
 
     # First attempt
-    decision_dict, final_message = _call_agent(client, messages, verbose=verbose)
+    decision_dict, final_message, call_meta = _call_agent(client, messages, verbose=verbose)
+    all_tool_calls.extend(call_meta["tool_calls"])
+    total_input_tokens += call_meta["token_usage"]["input_tokens"]
+    total_output_tokens += call_meta["token_usage"]["output_tokens"]
+    total_agent_turns += call_meta["agent_turns"]
 
     # Add assistant response to messages for context continuity
     if final_message:
         messages.append({"role": "assistant", "content": final_message.content})
 
     # Validate (dry -- we only check, we do NOT apply yet)
-    # We use a temporary engine reference just for dry-validation.
-    # The actual apply happens in run_agent_game after we return.
-    # For validation-only, we need to peek without mutating game state.
-    # We'll do a pre-check here using the same validate function but on a
-    # *snapshot*; however, to keep things simple and avoid deep copies,
-    # we use _peek_validate which checks validity without side effects.
     result = _peek_validate(game_state, decision_dict, managed_team)
 
     retries = 0
@@ -371,7 +402,11 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
         messages.append({"role": "user", "content": error_msg})
 
         try:
-            decision_dict, final_message = _call_agent(client, messages, verbose=verbose)
+            decision_dict, final_message, call_meta = _call_agent(client, messages, verbose=verbose)
+            all_tool_calls.extend(call_meta["tool_calls"])
+            total_input_tokens += call_meta["token_usage"]["input_tokens"]
+            total_output_tokens += call_meta["token_usage"]["output_tokens"]
+            total_agent_turns += call_meta["agent_turns"]
         except Exception as e:
             if verbose:
                 print(f"    [Error] Agent retry call failed: {e}")
@@ -403,7 +438,168 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
             "risks": [],
         }
 
-    return decision_dict, messages
+    elapsed_ms = round((time.time() - start_time) * 1000)
+
+    decision_metadata = {
+        "tool_calls": all_tool_calls,
+        "token_usage": {
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_input_tokens + total_output_tokens,
+        },
+        "latency_ms": elapsed_ms,
+        "agent_turns": total_agent_turns,
+        "retries": retries,
+    }
+
+    return decision_dict, messages, decision_metadata
+
+
+NO_ACTION_TYPES = {
+    "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
+    "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+}
+
+
+def build_decision_log_entry(
+    turn: int,
+    game_state: GameState,
+    managed_team: str,
+    decision_dict: dict,
+    decision_metadata: dict,
+    timestamp: float,
+) -> dict:
+    """Build a comprehensive decision log entry with full game context.
+
+    Each entry captures everything needed to replay and analyze a decision:
+    game state, tool calls with parameters, the full decision response,
+    token usage, and latency.
+
+    Args:
+        turn: Agent invocation counter (1-indexed).
+        game_state: Current game state at decision time.
+        managed_team: "home" or "away".
+        decision_dict: The agent's decision dict.
+        decision_metadata: Metadata from run_agent_decision (tool_calls,
+            token_usage, latency_ms, retries).
+        timestamp: Wall-clock time of the decision.
+
+    Returns:
+        Structured dict suitable for JSON serialization.
+    """
+    bt = game_state.batting_team()
+    ft = game_state.fielding_team()
+    pitcher = game_state.current_pitcher()
+    batter = bt.current_batter()
+
+    # Runner state
+    runners = {}
+    for base in (1, 2, 3):
+        r = game_state.runner_on(base)
+        if r:
+            runners[str(base)] = {"player_id": r.player.player_id, "name": r.player.name}
+
+    # Determine if active decision
+    decision_type = decision_dict.get("decision", "").upper().strip()
+    is_active = decision_type not in NO_ACTION_TYPES and bool(decision_type)
+
+    return {
+        "turn": turn,
+        "timestamp": timestamp,
+        # Full game state context
+        "game_state": {
+            "inning": game_state.inning,
+            "half": game_state.half,
+            "outs": game_state.outs,
+            "score": {"home": game_state.score_home, "away": game_state.score_away},
+            "runners": runners,
+            "batter": {"player_id": batter.player_id, "name": batter.name},
+            "pitcher": {"player_id": pitcher.player_id, "name": pitcher.name},
+            "situation": game_state.situation_display(),
+        },
+        "managed_team": managed_team,
+        # Tool calls the agent made (with parameters)
+        "tool_calls": decision_metadata.get("tool_calls", []),
+        # The agent's full decision response
+        "decision": decision_dict,
+        "is_active_decision": is_active,
+        # Token usage and performance
+        "token_usage": decision_metadata.get("token_usage", {}),
+        "latency_ms": decision_metadata.get("latency_ms", 0),
+        "agent_turns": decision_metadata.get("agent_turns", 0),
+        "retries": decision_metadata.get("retries", 0),
+    }
+
+
+def write_game_log(
+    game_state: GameState,
+    decision_log: list[dict],
+    error_log: list[dict],
+    seed: int,
+    managed_team: str,
+    log_dir: Path | None = None,
+) -> Path:
+    """Write the complete game decision log to a structured JSON file.
+
+    Log files are organized by game in data/game_logs/, with one file per
+    game identified by seed and timestamp.
+
+    Args:
+        game_state: Final game state.
+        decision_log: List of decision log entries from build_decision_log_entry.
+        error_log: List of error entries.
+        seed: Game seed for identification.
+        managed_team: Which team the agent managed.
+        log_dir: Override directory for logs (default: data/game_logs/).
+
+    Returns:
+        Path to the written log file.
+    """
+    if log_dir is None:
+        log_dir = Path(__file__).parent / "data" / "game_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Count active vs no-action decisions
+    active_count = sum(1 for d in decision_log if d.get("is_active_decision"))
+    no_action_count = len(decision_log) - active_count
+
+    # Aggregate token usage
+    total_input = sum(d.get("token_usage", {}).get("input_tokens", 0) for d in decision_log)
+    total_output = sum(d.get("token_usage", {}).get("output_tokens", 0) for d in decision_log)
+    total_latency = sum(d.get("latency_ms", 0) for d in decision_log)
+
+    game_log = {
+        "game_info": {
+            "seed": seed,
+            "home_team": game_state.home.name,
+            "away_team": game_state.away.name,
+            "managed_team": managed_team,
+            "final_score": {
+                "home": game_state.score_home,
+                "away": game_state.score_away,
+            },
+            "winner": game_state.winning_team,
+            "innings": game_state.inning,
+        },
+        "summary": {
+            "total_decisions": len(decision_log),
+            "active_decisions": active_count,
+            "no_action_decisions": no_action_count,
+            "total_errors": len(error_log),
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_tokens": total_input + total_output,
+            "total_latency_ms": total_latency,
+        },
+        "decisions": decision_log,
+        "errors": error_log,
+    }
+
+    log_path = log_dir / f"game_{seed}.json"
+    with open(log_path, "w") as f:
+        json.dump(game_log, f, indent=2, default=str)
+
+    return log_path
 
 
 def run_agent_game(seed: int | None = None, managed_team: str = "home",
@@ -487,8 +683,9 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                 pitcher = game.current_pitcher()
                 print(f"\n  [{situation}] {batter.name} vs {pitcher.name}")
 
+            decision_metadata = {}
             try:
-                decision_dict, messages = run_agent_decision(
+                decision_dict, messages, decision_metadata = run_agent_decision(
                     client, game, managed_team, messages,
                     verbose=verbose, max_retries=max_consecutive_failures,
                 )
@@ -512,18 +709,15 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                     "risks": [],
                 }
 
-            # Log the decision
-            decision_entry = {
-                "turn": total_agent_calls,
-                "inning": game.inning,
-                "half": game.half,
-                "outs": game.outs,
-                "score_home": game.score_home,
-                "score_away": game.score_away,
-                "situation": game.situation_display(),
-                "decision": decision_dict,
-                "timestamp": time.time(),
-            }
+            # Build comprehensive decision log entry
+            decision_entry = build_decision_log_entry(
+                turn=total_agent_calls,
+                game_state=game,
+                managed_team=managed_team,
+                decision_dict=decision_dict,
+                decision_metadata=decision_metadata,
+                timestamp=time.time(),
+            )
             decision_log.append(decision_entry)
 
             # Apply the decision (should be valid after retry loop, but
@@ -606,19 +800,20 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
             print(decisions_summary)
         print(f"\nAgent decisions: {total_agent_calls}")
         print(f"Decision log entries: {len(decision_log)}")
+        active_count = sum(1 for d in decision_log if d.get("is_active_decision"))
+        print(f"Active decisions: {active_count}")
         if error_log:
             print(f"Error log entries: {len(error_log)}")
 
-    # Save decision log and error log
-    log_path = Path(__file__).parent / "data" / f"decision_log_{engine.seed}.json"
+    # Save structured game decision log
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_data = {
-            "decisions": decision_log,
-            "errors": error_log,
-        }
-        with open(log_path, "w") as f:
-            json.dump(log_data, f, indent=2, default=str)
+        log_path = write_game_log(
+            game_state=game,
+            decision_log=decision_log,
+            error_log=error_log,
+            seed=engine.seed,
+            managed_team=managed_team,
+        )
         if verbose:
             print(f"Decision log saved to: {log_path}")
     except Exception:
