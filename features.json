@@ -2,6 +2,7 @@
   {
     "category": "architecture",
     "name": "repo_setup",
+    "status": "passing",
     "description": "Bootstrap the project repository with the initial directory structure, main entry point script, and foundational modules. Creates game.py as a single-file UV script with inline PEP 723 metadata, the tools/ directory with placeholder files for all 12 tools, the player data model, the game state model, and the ManagerDecision output schema. After this feature is complete, the project skeleton is in place and all other features build on top of it.",
     "steps": [
       "Create game.py as the main entry point with a PEP 723 inline metadata block declaring dependencies (anthropic, pydantic)",

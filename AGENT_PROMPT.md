@@ -9,3 +9,5 @@ The instructions are:
 *   Then, select the single most important item to implement from `features.json`.
 *   Once the feature has been implemented and fully tested and you confirm it's working, mark it as passing in `features.json` and return. Do not finish until you are entirely sure that the given feature is passing. 
 * Then commit and push changes.
+
+ONLY DO ONE FEATURE AT A TIME.
