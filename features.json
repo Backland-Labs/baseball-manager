@@ -16,7 +16,7 @@
   {
     "category": "architecture",
     "name": "claude_agent_sdk",
-    "passing": false,
+    "passing": true,
     "description": "The agent is built on the Claude Agent SDK. The SDK manages the tool-use loop: sending the game state to Claude, dispatching tool calls for information gathering, and receiving the agent's plain-text decision as output.",
     "steps": [
       "The agent is instantiated using the Claude Agent SDK client (anthropic package)",
