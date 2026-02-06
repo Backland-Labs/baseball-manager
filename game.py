@@ -61,49 +61,32 @@ from simulation import (
 
 
 # ---------------------------------------------------------------------------
-# System prompt
+# System prompt -- loaded from AGENT_PROMPT.md at runtime
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """\
-You are an experienced baseball manager. You receive a game scenario describing \
-the current situation and must make a managerial decision.
+_AGENT_PROMPT_PATH = Path(__file__).parent / "AGENT_PROMPT.md"
 
-You have access to 12 information-gathering tools that let you look up player \
-statistics, evaluate strategic options, and assess game probabilities. Use them \
-to build analytical context before deciding.
 
-After gathering the information you need, respond with your decision as a \
-structured ManagerDecision object.
+def load_system_prompt(path: Path | None = None) -> str:
+    """Load the agent system prompt from AGENT_PROMPT.md.
 
-Key principles:
-- Always consider the inning, score, outs, runners, and matchup before deciding.
-- Use tools to compute win probability and run expectancy for context.
-- Factor in platoon advantages, pitcher fatigue, and bullpen availability.
-- Consider the 3-batter minimum rule for relievers.
-- Weigh both expected runs and probability of scoring at least one run.
-- Account for remaining bench and bullpen depth when making substitutions.
-- A player removed from the game cannot re-enter.
-- Mound visits are limited (5 per 9-inning game).
+    Args:
+        path: Override path to the prompt file. Defaults to AGENT_PROMPT.md
+              in the project root (same directory as game.py).
 
-Decision types you can return:
-- NO_ACTION / SWING_AWAY: No strategic intervention, let play proceed normally.
-- PITCHING_CHANGE / PULL_STARTER: Replace the current pitcher. Specify the replacement by name.
-- PINCH_HIT: Send a pinch hitter. Specify who bats and for whom.
-- STOLEN_BASE: Attempt a steal. Specify the runner.
-- SACRIFICE_BUNT / BUNT / SQUEEZE: Bunt attempt.
-- INTENTIONAL_WALK: Issue an intentional walk to the current batter.
-- DEFENSIVE_POSITIONING: Adjust fielder positions. Describe the shift.
-- MOUND_VISIT: Make a mound visit.
-- PINCH_RUN: Send a pinch runner.
-- REPLAY_CHALLENGE: Challenge a call.
+    Returns:
+        The contents of the prompt file as a string.
 
-When deciding, include player IDs or full player names in action_details so \
-the simulation can identify the players involved.
+    Raises:
+        FileNotFoundError: If the prompt file does not exist.
+    """
+    prompt_path = path or _AGENT_PROMPT_PATH
+    return prompt_path.read_text(encoding="utf-8")
 
-Most at-bats require no strategic intervention. Use NO_ACTION or SWING_AWAY \
-unless the situation clearly calls for a strategic move. Do not overthink \
-routine situations -- save your analysis for high-leverage moments.
-"""
+
+# Load at module level so it's available throughout the module.
+# This is the prompt that gets sent to the Claude agent as the system message.
+SYSTEM_PROMPT = load_system_prompt()
 
 
 # ---------------------------------------------------------------------------

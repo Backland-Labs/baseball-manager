@@ -325,7 +325,7 @@
   {
     "category": "functional",
     "name": "agent_system_prompt",
-    "passing": false,
+    "passing": true,
     "description": "The system prompt provided to the Claude agent instructs it to act as a baseball manager for a specific team. It explains the tools available, the analytical framework, MLB rules, and the expected plain-text output format.",
     "steps": [
       "Establish the agent's identity as the manager of a specific MLB team",
