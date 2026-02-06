@@ -217,7 +217,7 @@
   {
     "category": "tool",
     "name": "evaluate_sacrifice_bunt",
-    "passing": false,
+    "passing": true,
     "description": "Evaluates whether a sacrifice bunt is optimal given the batter, base-out state, score differential, and inning. Compares bunt vs swing-away expected runs and probability of scoring at least one run.",
     "steps": [
       "Accepts batter identifier, base-out state, score differential, and inning",
