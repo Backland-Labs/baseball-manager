@@ -69,6 +69,15 @@ from simulation import (
     DecisionResult,
     game_state_to_dict,
 )
+from decision_quality_wpa import (
+    compute_wp_from_game_state,
+    compute_li_from_game_state,
+    score_decision,
+    generate_game_wpa_report,
+    format_wpa_report,
+    DecisionWPA,
+    GameWPAReport,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -625,6 +634,12 @@ def build_decision_log_entry(
         # The agent's full decision response
         "decision": decision_dict,
         "is_active_decision": is_active,
+        # WPA scoring -- wp_before and leverage_index are known at decision
+        # time; wp_after and wpa are filled in after the play resolves.
+        "wp_before": decision_metadata.get("wp_before"),
+        "leverage_index": decision_metadata.get("leverage_index"),
+        "wp_after": None,
+        "wpa": None,
         # Token usage and performance
         "token_usage": decision_metadata.get("token_usage", {}),
         "latency_ms": decision_metadata.get("latency_ms", 0),
@@ -640,6 +655,7 @@ def write_game_log(
     seed: int,
     managed_team: str,
     log_dir: Path | None = None,
+    wpa_report: GameWPAReport | None = None,
 ) -> Path:
     """Write the complete game decision log to a structured JSON file.
 
@@ -653,6 +669,7 @@ def write_game_log(
         seed: Game seed for identification.
         managed_team: Which team the agent managed.
         log_dir: Override directory for logs (default: data/game_logs/).
+        wpa_report: Optional WPA report for decision quality scoring.
 
     Returns:
         Path to the written log file.
@@ -697,11 +714,45 @@ def write_game_log(
         "errors": error_log,
     }
 
+    # Include WPA report if available
+    if wpa_report is not None:
+        game_log["wpa_report"] = wpa_report.to_dict()
+
     log_path = log_dir / f"game_{seed}.json"
     with open(log_path, "w") as f:
         json.dump(game_log, f, indent=2, default=str)
 
     return log_path
+
+
+def _update_last_decision_wp_after(
+    decision_log: list[dict], game_state: GameState, managed_team: str,
+) -> None:
+    """Update the most recent decision log entry with wp_after and wpa.
+
+    Called after the game state changes (PA resolves, IBB, CS, etc.)
+    to fill in the post-decision win probability.
+    """
+    if not decision_log:
+        return
+    entry = decision_log[-1]
+    if entry.get("wp_after") is not None:
+        return  # already set
+
+    if game_state.game_over:
+        # Game is over: WP is 1.0 or 0.0 based on outcome
+        is_home = managed_team == "home"
+        if is_home:
+            wp_after = 1.0 if game_state.score_home > game_state.score_away else 0.0
+        else:
+            wp_after = 1.0 if game_state.score_away > game_state.score_home else 0.0
+    else:
+        wp_after = compute_wp_from_game_state(game_state, managed_team)
+
+    entry["wp_after"] = round(wp_after, 4)
+    wp_before = entry.get("wp_before")
+    if wp_before is not None:
+        entry["wpa"] = round(wp_after - wp_before, 4)
 
 
 def run_agent_game(seed: int | None = None, managed_team: str = "home",
@@ -785,6 +836,10 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                 pitcher = game.current_pitcher()
                 print(f"\n  [{situation}] {batter.name} vs {pitcher.name}")
 
+            # Compute WP and LI before the decision for WPA scoring
+            wp_before = compute_wp_from_game_state(game, managed_team)
+            li_before = compute_li_from_game_state(game, managed_team)
+
             decision_metadata = {}
             try:
                 decision_dict, messages, decision_metadata = run_agent_decision(
@@ -810,6 +865,10 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                     "key_factors": [],
                     "risks": [],
                 }
+
+            # Attach WP_before and LI to decision metadata for logging
+            decision_metadata["wp_before"] = wp_before
+            decision_metadata["leverage_index"] = li_before
 
             # Build comprehensive decision log entry
             decision_entry = build_decision_log_entry(
@@ -852,6 +911,8 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                     if verbose:
                         for event in result.events:
                             print(f"  {event.description}")
+                    # Compute wp_after for this decision (IBB consumed the PA)
+                    _update_last_decision_wp_after(decision_log, game, managed_team)
                     # Check if game ended on walk-off IBB
                     if game.game_over:
                         break
@@ -866,6 +927,8 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                             else:
                                 print(f"\n{event.description}")
                     if game.game_over or game.outs >= 3:
+                        # Compute wp_after for this decision (CS ended the inning)
+                        _update_last_decision_wp_after(decision_log, game, managed_team)
                         continue
         else:
             # Opponent's turn: use automated management
@@ -892,6 +955,48 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                 elif e.runs_scored > 0:
                     print(f"  Score: Away {game.score_away} - Home {game.score_home}")
 
+        # Compute wp_after for the most recent agent decision (after PA resolved)
+        if decision_log and decision_log[-1].get("wp_after") is None:
+            _update_last_decision_wp_after(decision_log, game, managed_team)
+
+    # Ensure last decision has wp_after filled in
+    if decision_log and decision_log[-1].get("wp_after") is None:
+        _update_last_decision_wp_after(decision_log, game, managed_team)
+
+    # Generate WPA report from decision log
+    wpa_scores: list[DecisionWPA] = []
+    for entry in decision_log:
+        wp_b = entry.get("wp_before")
+        wp_a = entry.get("wp_after")
+        if wp_b is not None and wp_a is not None:
+            gs = entry.get("game_state", {})
+            score = gs.get("score", {})
+            is_home = managed_team == "home"
+            if is_home:
+                sd = score.get("home", 0) - score.get("away", 0)
+            else:
+                sd = score.get("away", 0) - score.get("home", 0)
+
+            runners_dict = gs.get("runners", {})
+            from decision_quality_wpa import _runners_key
+            runner_key = _runners_key("1" in runners_dict, "2" in runners_dict, "3" in runners_dict)
+
+            dwpa = score_decision(
+                wp_before=wp_b,
+                wp_after=wp_a,
+                decision_dict=entry.get("decision", {}),
+                leverage_index=entry.get("leverage_index", 1.0),
+                turn=entry.get("turn", 0),
+                inning=gs.get("inning", 0),
+                half=gs.get("half", ""),
+                outs=gs.get("outs", 0),
+                score_diff=sd,
+                runners=runner_key,
+            )
+            wpa_scores.append(dwpa)
+
+    wpa_report = generate_game_wpa_report(wpa_scores)
+
     # Game over -- print summary
     if verbose:
         print()
@@ -907,6 +1012,11 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
         if error_log:
             print(f"Error log entries: {len(error_log)}")
 
+        # Print WPA report
+        if wpa_scores:
+            print()
+            print(format_wpa_report(wpa_report))
+
     # Save structured game decision log
     try:
         log_path = write_game_log(
@@ -915,6 +1025,7 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
             error_log=error_log,
             seed=engine.seed,
             managed_team=managed_team,
+            wpa_report=wpa_report,
         )
         if verbose:
             print(f"Decision log saved to: {log_path}")

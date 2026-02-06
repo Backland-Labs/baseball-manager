@@ -468,5 +468,26 @@
       "Rate limit events are logged with timestamps",
       "The system respects Retry-After headers when provided"
     ]
+  },
+  {
+    "category": "evaluation",
+    "name": "decision_quality_wpa",
+    "passing": true,
+    "description": "Measures the quality of each managerial decision by computing Win Probability Added (WPA). WPA is the standard sabermetric measure of how much a single decision changed the game's win probability. Computes WP before and after each decision, scores active vs no-action decisions, generates game-level aggregate quality reports, and integrates with the decision logging system.",
+    "steps": [
+      "Implement decision_quality_wpa.py module with WP and LI lookup functions that reuse the pre-computed win probability and leverage index tables",
+      "Compute WP_before at each decision point from the game state (inning, half, outs, runners, score differential, home/away perspective)",
+      "Compute WP_after once the play resolves (next game state or game outcome for the final decision)",
+      "Calculate WPA as WP_after minus WP_before for each decision",
+      "Classify decisions as active (pitching change, stolen base, pinch hit, etc.) or no-action (NO_ACTION, SWING_AWAY, etc.)",
+      "Score each decision with DecisionWPA containing turn, decision type, WP before/after, WPA, leverage index, and game context",
+      "Generate GameWPAReport with aggregate metrics: total WPA, active WPA, avg WPA per active decision, best/worst decisions by WPA, positive/negative/neutral WPA counts, high-leverage decision count",
+      "Score saved game log files post-hoc by computing WP from logged game state context at each decision point",
+      "Integrate WPA scoring into the game.py agent loop: compute wp_before before each agent call, compute wp_after after play resolves, attach WPA data to decision log entries",
+      "Include WPA report in the structured game log JSON output written by write_game_log()",
+      "Format WPA reports as human-readable text for game-end summaries",
+      "Handle edge cases: game-over states (WP = 1.0 or 0.0), extreme scores, empty logs, missing WP data, home vs away perspective",
+      "81 tests covering WP lookup, LI lookup, decision scoring, report generation, game log scoring, file loading, formatting, integration with game.py, and edge cases"
+    ]
   }
 ]
