@@ -466,5 +466,100 @@
       "Player identifiers are validated against the current roster before any data lookup executes",
       "Validation errors include which parameter failed and what was expected"
     ]
+  },
+  {
+    "category": "functional",
+    "name": "mlb_stats_api_rosters",
+    "description": "Fetch real MLB rosters from the MLB Stats API (statsapi.mlb.com) so the agent can manage games with actual current-season players. Replaces the static sample_rosters.json with live 40-man and 26-man active roster data, including player metadata, positions, handedness, and status.",
+    "steps": [
+      "Add the mlb-statsapi Python package (or use raw HTTP requests to statsapi.mlb.com/api/v1) as an inline dependency",
+      "Implement a data/fetch_rosters.py script that accepts a team name or MLB team ID and fetches the current 26-man active roster",
+      "Map MLB Stats API player fields to the existing Player/Batter/Pitcher/Fielder Pydantic models (name, position, handedness, jersey number)",
+      "Fetch and populate pitcher handedness (throws L/R) and batter handedness (bats L/R/S) from the API person endpoint",
+      "For each rostered player, fetch their primary and secondary fielding positions from the API",
+      "Write the fetched roster to a JSON file in data/ following the same schema as sample_rosters.json so existing tools can consume it without changes",
+      "Support fetching rosters for a specific date (historical rosters) via the API's date parameter",
+      "Handle API errors gracefully: connection failures, invalid team IDs, and off-season empty rosters return clear error messages",
+      "Add a --team flag to game.py that triggers a live roster fetch instead of loading sample_rosters.json"
+    ]
+  },
+  {
+    "category": "functional",
+    "name": "statcast_player_stats",
+    "description": "Integrate pybaseball to fetch real Statcast and FanGraphs player statistics, replacing the synthetic stat derivation in get_batter_stats and get_pitcher_stats. Uses Baseball Savant and FanGraphs as the upstream data sources for season stats, splits, advanced metrics, and pitch-level data.",
+    "steps": [
+      "Add pybaseball as an inline dependency in the relevant tool scripts",
+      "In get_batter_stats, replace the attribute-derived stat formulas with real season stats fetched via pybaseball.batting_stats() or pybaseball.playerid_lookup() + pybaseball.statcast_batter()",
+      "Fetch real traditional stats (AVG, OBP, SLG, OPS), advanced metrics (wOBA, wRC+, barrel rate, xwOBA), plate discipline (K%, BB%, chase rate, whiff rate), and batted ball profile (GB%, pull%, exit velocity, launch angle) from Statcast/FanGraphs",
+      "In get_pitcher_stats, replace attribute-derived formulas with real stats via pybaseball.pitching_stats() or pybaseball.statcast_pitcher()",
+      "Fetch real pitch mix data from Statcast: per-pitch-type velocity, spin rate, movement, and whiff rate",
+      "Support split queries (vs LHB/RHB, home/away) using pybaseball's splits functionality or by filtering Statcast data",
+      "Implement a local cache layer (JSON files in data/cache/) so repeated lookups for the same player and season do not re-fetch from the network",
+      "Cache entries expire after 24 hours to balance freshness with rate-limit friendliness",
+      "Fall back to the existing synthetic stat derivation if the network fetch fails or the player is not found in Statcast (e.g., minor leaguers)"
+    ]
+  },
+  {
+    "category": "functional",
+    "name": "retrosheet_run_expectancy",
+    "description": "Compute run expectancy matrices and win probability tables from real Retrosheet play-by-play event files. Replaces the hard-coded RE24 matrix and simple win probability formula with empirically derived values from actual MLB game data.",
+    "steps": [
+      "Add a data/compute_re_matrix.py script that downloads and parses Retrosheet event files for a configurable range of seasons",
+      "Parse Retrosheet .EVA/.EVN event files to extract play-by-play state transitions (base-out state before and after each event, runs scored)",
+      "Compute the 24-state run expectancy matrix (8 base states x 3 out states) by averaging runs scored from each state to end of inning across all parsed games",
+      "Compute win probability tables indexed by (inning, half, outs, base state, score differential) from the parsed game outcomes",
+      "Compute leverage index values for each game state from the win probability table",
+      "Write the computed matrices to JSON lookup files in data/ (re_matrix.json, win_probability.json, leverage_index.json)",
+      "Update get_run_expectancy to load from data/re_matrix.json instead of the hard-coded dictionary",
+      "Update get_win_probability to load from data/win_probability.json instead of the algorithmic approximation",
+      "Include pre-computed tables for the 2019-2023 seasons in the repository so the tool works without running the computation script",
+      "The computation script is idempotent and can be re-run to update tables when new seasons of Retrosheet data become available"
+    ]
+  },
+  {
+    "category": "functional",
+    "name": "live_game_feed",
+    "description": "Connect to the MLB Stats API live game feed (statsapi.mlb.com/api/v1.1/game/{gamePk}/feed/live) to ingest real-time game state for a game in progress. This allows the agent to manage decisions for an actual live MLB game rather than a simulated one.",
+    "steps": [
+      "Implement a data/live_feed.py module that accepts a gamePk (MLB game ID) and polls the live feed endpoint",
+      "Parse the live feed JSON to extract current game state: inning, half, outs, runners on base, score, current batter, current pitcher, count, and last play result",
+      "Map the live feed's player IDs to the roster data fetched via mlb_stats_api_rosters so tools can look up the correct players",
+      "Convert the live feed game state into the existing MatchupState, RosterState, and OpponentRosterState Pydantic models",
+      "Detect decision points from the live feed: pitching changes, pinch hitter opportunities, steal situations, defensive alignment moments",
+      "Add a --live flag to game.py that accepts a gamePk and switches from simulation mode to live advisory mode",
+      "In live advisory mode, the agent observes the real game state and outputs what decisions it would make at each decision point, without controlling the simulation",
+      "Poll the live feed at a configurable interval (default 10 seconds) to detect state changes",
+      "Handle game delays, rain delays, and the feed going temporarily unavailable without crashing"
+    ]
+  },
+  {
+    "category": "functional",
+    "name": "historical_game_scenarios",
+    "description": "Load real historical game situations from the MLB Stats API or Retrosheet to test the agent against actual past decision points. This enables evaluating agent decision quality by comparing its choices to what real managers did in the same situations.",
+    "steps": [
+      "Implement a data/load_scenario.py script that accepts a gamePk and an inning/event index to load a specific historical game state",
+      "Fetch the full play-by-play for a completed game from the MLB Stats API (game/{gamePk}/feed/live endpoint works for historical games too)",
+      "Extract the game state at a given event index: rosters, lineups, bullpen usage, score, inning, outs, runners, pitch counts, substitution history up to that point",
+      "Convert the extracted state into MatchupState, RosterState, and OpponentRosterState models for the agent",
+      "Include a curated set of 20+ notable historical decision points in data/scenarios/ as pre-fetched JSON files (e.g., famous bullpen decisions, pinch-hit situations, late-game steal attempts)",
+      "Add a --scenario flag to game.py that loads a historical scenario and asks the agent for its decision at that point",
+      "After the agent decides, display what the real manager actually did and the outcome for comparison",
+      "Support batch evaluation: run the agent against all curated scenarios and produce a summary report of agreement/disagreement with real manager decisions",
+      "Scenarios include metadata: date, teams, manager names, game significance (regular season, playoff, World Series)"
+    ]
+  },
+  {
+    "category": "functional",
+    "name": "batter_vs_pitcher_history",
+    "description": "Fetch real batter-vs-pitcher matchup history from Baseball Reference or the MLB Stats API to replace the synthetic matchup data in get_matchup_data. Provides actual career head-to-head plate appearance results.",
+    "steps": [
+      "Use pybaseball or the MLB Stats API endpoint (people/{playerId}/stats?stats=vsPlayer&opposingPlayerId={pitcherId}) to fetch real career matchup data",
+      "Retrieve career plate appearances, at-bats, hits, doubles, triples, home runs, walks, strikeouts, batting average, slugging, and OPS for the matchup",
+      "Update get_matchup_data to use real matchup history when available instead of the deterministic hash-based synthetic data",
+      "When the real matchup has fewer than 10 plate appearances, supplement with the existing similarity-model projection",
+      "Implement caching for matchup lookups in data/cache/matchups/ to avoid redundant API calls during a single game",
+      "Handle cases where one or both players have no MLB history (rookies, minor leaguers) by falling back to the synthetic approach",
+      "Return the same JSON response schema as the current get_matchup_data so the agent's interpretation logic does not need to change"
+    ]
   }
 ]
