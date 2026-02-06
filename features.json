@@ -79,7 +79,7 @@
   {
     "category": "data",
     "name": "batter_vs_pitcher_history",
-    "passing": false,
+    "passing": true,
     "description": "Fetch real batter-vs-pitcher matchup history from the MLB Stats API or pybaseball. Provides actual career head-to-head plate appearance results for use by the matchup data tool.",
     "steps": [
       "Use the MLB Stats API vsPlayer endpoint or pybaseball to fetch career matchup data",
