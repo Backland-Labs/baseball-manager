@@ -154,7 +154,7 @@
   {
     "category": "tool",
     "name": "get_matchup_data",
-    "passing": false,
+    "passing": true,
     "description": "Retrieves real batter-vs-pitcher career history from the MLB Stats API. Returns direct matchup results, sample-size indicator, and pitch-type vulnerability breakdown. For small samples, supplements with similarity-based projections.",
     "steps": [
       "Accepts a batter identifier and a pitcher identifier",
