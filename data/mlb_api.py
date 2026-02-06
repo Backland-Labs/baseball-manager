@@ -25,11 +25,15 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+import random
 import time
 import urllib.error
 import urllib.request
 import json
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from data.cache import (
     Cache,
@@ -144,17 +148,58 @@ class MLBApiTimeoutError(MLBApiError):
     """Raised when a request to the API times out."""
 
 
+class MLBApiRateLimitError(MLBApiError):
+    """Raised when the API returns a 429 Too Many Requests response.
+
+    Attributes:
+        retry_after: The number of seconds to wait before retrying,
+            parsed from the Retry-After header. ``None`` if no header
+            was present.
+    """
+
+    def __init__(self, message: str, retry_after: float | None = None,
+                 url: str | None = None):
+        self.retry_after = retry_after
+        super().__init__(message, status_code=429, url=url)
+
+
 # ---------------------------------------------------------------------------
 # Low-level HTTP helpers
 # ---------------------------------------------------------------------------
+
+def _parse_retry_after(exc: urllib.error.HTTPError) -> float | None:
+    """Parse the Retry-After header from an HTTP error response.
+
+    The header may be an integer (seconds) or an HTTP-date.  We only
+    handle the integer form and return ``None`` for dates or missing
+    headers.
+
+    Args:
+        exc: The HTTPError with headers to inspect.
+
+    Returns:
+        Seconds to wait, or ``None`` if the header is missing or
+        unparseable.
+    """
+    try:
+        header = exc.headers.get("Retry-After") if exc.headers else None
+    except Exception:
+        return None
+    if header is None:
+        return None
+    try:
+        return max(0.0, float(header))
+    except (TypeError, ValueError):
+        return None
+
 
 def _fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT,
                 max_retries: int = MAX_RETRIES) -> dict[str, Any]:
     """Fetch JSON from *url* with retry logic for transient failures.
 
-    Retries on connection errors and 5xx responses using exponential
-    backoff.  Raises :class:`MLBApiError` subclasses for non-retryable
-    failures.
+    Retries on connection errors, 5xx responses, and 429 (rate limit)
+    responses using exponential backoff with jitter.  For 429 responses
+    the ``Retry-After`` header is respected when present.
 
     Args:
         url: Full URL to fetch.
@@ -166,6 +211,7 @@ def _fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT,
 
     Raises:
         MLBApiNotFoundError: If the server returns 404.
+        MLBApiRateLimitError: If rate-limited after all retries.
         MLBApiTimeoutError: If all attempts time out.
         MLBApiConnectionError: If the server is unreachable after retries.
         MLBApiError: For other HTTP errors.
@@ -199,6 +245,23 @@ def _fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT,
                     status_code=exc.code,
                     url=url,
                 ) from exc
+            if exc.code == 429:
+                # Rate limited -- retryable with Retry-After header
+                retry_after = _parse_retry_after(exc)
+                last_error = MLBApiRateLimitError(
+                    f"Rate limited (429) from {url}",
+                    retry_after=retry_after,
+                    url=url,
+                )
+                logger.warning(
+                    "MLB API rate limit (429) on attempt %d/%d for %s "
+                    "(Retry-After: %s)",
+                    attempt + 1, max_retries, url,
+                    retry_after if retry_after is not None else "not set",
+                )
+                if attempt < max_retries - 1:
+                    _backoff_sleep(attempt, retry_after=retry_after)
+                continue
             if exc.code >= 500:
                 # Server error -- retryable
                 last_error = exc
@@ -240,6 +303,8 @@ def _fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT,
             continue
 
     # All retries exhausted
+    if isinstance(last_error, MLBApiRateLimitError):
+        raise last_error
     if isinstance(last_error, (MLBApiTimeoutError, MLBApiConnectionError)):
         raise last_error
     raise MLBApiConnectionError(
@@ -247,9 +312,23 @@ def _fetch_json(url: str, timeout: int = DEFAULT_TIMEOUT,
     )
 
 
-def _backoff_sleep(attempt: int) -> None:
-    """Sleep with exponential backoff."""
-    delay = RETRY_BACKOFF_BASE * (2 ** attempt)
+def _backoff_sleep(attempt: int, retry_after: float | None = None) -> None:
+    """Sleep with exponential backoff and jitter.
+
+    If *retry_after* is provided (from a ``Retry-After`` header), the
+    sleep duration is the **maximum** of the computed backoff and the
+    server-requested delay.
+
+    Args:
+        attempt: Zero-based attempt number (0 = first retry).
+        retry_after: Optional server-requested delay in seconds.
+    """
+    base_delay = RETRY_BACKOFF_BASE * (2 ** attempt)
+    # Add jitter: random value in [0, base_delay)
+    jitter = random.random() * base_delay
+    delay = base_delay + jitter
+    if retry_after is not None and retry_after > delay:
+        delay = retry_after
     time.sleep(delay)
 
 

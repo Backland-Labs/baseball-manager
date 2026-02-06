@@ -310,11 +310,21 @@ def poll_game_feed(
         feed = fetch_fn(game_pk)
     except Exception as exc:
         state.consecutive_errors += 1
+        # Detect rate limit errors from the MLB API
+        is_rate_limited = False
+        try:
+            from data.mlb_api import MLBApiRateLimitError
+            if isinstance(exc, MLBApiRateLimitError):
+                is_rate_limited = True
+        except ImportError:
+            pass
+
+        error_type = "rate_limit_error" if is_rate_limited else "feed_fetch_error"
         error_msg = f"Failed to fetch game feed: {exc}"
         logger.warning(error_msg)
         state.error_log.append({
             "timestamp": time.time(),
-            "error_type": "feed_fetch_error",
+            "error_type": error_type,
             "error": error_msg,
             "consecutive_errors": state.consecutive_errors,
         })

@@ -458,7 +458,7 @@
   {
     "category": "technical",
     "name": "api_rate_limit_handling",
-    "passing": false,
+    "passing": true,
     "description": "Handles rate limits from both the Claude API and external data APIs (MLB Stats API, Statcast/FanGraphs via pybaseball). Uses exponential backoff and respects Retry-After headers.",
     "steps": [
       "Claude API rate limit (429) responses trigger exponential backoff retry with jitter",

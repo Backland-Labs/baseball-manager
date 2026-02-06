@@ -1204,20 +1204,26 @@ def test_agent_call_failure_returns_no_action():
 
 
 def test_backoff_sleep_exponential():
-    """_backoff_sleep uses exponential delays: base * 2^attempt."""
+    """_backoff_sleep uses exponential delays with jitter: base * 2^attempt + jitter."""
     from data.mlb_api import RETRY_BACKOFF_BASE
     import unittest.mock as mock
 
     with mock.patch("data.mlb_api.time.sleep") as mock_sleep:
         from data.mlb_api import _backoff_sleep
         _backoff_sleep(0)
-        mock_sleep.assert_called_with(RETRY_BACKOFF_BASE * 1)  # 2^0 = 1
+        delay_0 = mock_sleep.call_args[0][0]
+        base_0 = RETRY_BACKOFF_BASE * 1  # 2^0 = 1
+        assert base_0 <= delay_0 <= base_0 * 2, f"attempt 0: {delay_0} not in [{base_0}, {base_0 * 2}]"
 
         _backoff_sleep(1)
-        mock_sleep.assert_called_with(RETRY_BACKOFF_BASE * 2)  # 2^1 = 2
+        delay_1 = mock_sleep.call_args[0][0]
+        base_1 = RETRY_BACKOFF_BASE * 2  # 2^1 = 2
+        assert base_1 <= delay_1 <= base_1 * 2, f"attempt 1: {delay_1} not in [{base_1}, {base_1 * 2}]"
 
         _backoff_sleep(2)
-        mock_sleep.assert_called_with(RETRY_BACKOFF_BASE * 4)  # 2^2 = 4
+        delay_2 = mock_sleep.call_args[0][0]
+        base_2 = RETRY_BACKOFF_BASE * 4  # 2^2 = 4
+        assert base_2 <= delay_2 <= base_2 * 2, f"attempt 2: {delay_2} not in [{base_2}, {base_2 * 2}]"
     print("  test_backoff_sleep_exponential: PASSED")
 
 

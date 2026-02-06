@@ -17,13 +17,24 @@ Run with:  uv run game.py           # full agent game (requires ANTHROPIC_API_KE
 from __future__ import annotations
 
 import json
+import logging
 import os
+import random
 import sys
 import time
 import warnings
 from pathlib import Path
 
 from anthropic import Anthropic
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Claude API rate limit constants
+# ---------------------------------------------------------------------------
+
+CLAUDE_MAX_RETRIES = 5
+CLAUDE_BACKOFF_BASE = 2.0  # seconds; actual delay = base * 2^attempt + jitter
 
 from models import (
     BatterInfo,
@@ -225,9 +236,74 @@ def _peek_validate(game_state: GameState, decision: dict,
 # Agent decision loop
 # ---------------------------------------------------------------------------
 
+def _claude_backoff_sleep(attempt: int, retry_after: float | None = None) -> None:
+    """Sleep with exponential backoff and jitter for Claude API retries.
+
+    Args:
+        attempt: Zero-based retry attempt number.
+        retry_after: Optional server-requested delay (from Retry-After
+            or ``x-retry-after`` headers).
+    """
+    base_delay = CLAUDE_BACKOFF_BASE * (2 ** attempt)
+    jitter = random.random() * base_delay
+    delay = base_delay + jitter
+    if retry_after is not None and retry_after > delay:
+        delay = retry_after
+    time.sleep(delay)
+
+
+def _extract_retry_after(exc: Exception) -> float | None:
+    """Try to extract a Retry-After value from an Anthropic API error.
+
+    Anthropic rate limit errors often carry a ``response`` attribute
+    with headers.  We look for ``retry-after`` or ``x-retry-after``.
+
+    Args:
+        exc: The exception to inspect.
+
+    Returns:
+        Seconds to wait, or ``None`` if no value can be extracted.
+    """
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    for key in ("retry-after", "x-retry-after"):
+        val = headers.get(key)
+        if val is not None:
+            try:
+                return max(0.0, float(val))
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Check whether an Anthropic exception is a 429 rate limit error."""
+    status = getattr(exc, "status_code", None)
+    if status == 429:
+        return True
+    # Some SDK versions use 'status' instead of 'status_code'
+    status = getattr(exc, "status", None)
+    if status == 429:
+        return True
+    # Check the response object
+    response = getattr(exc, "response", None)
+    if response is not None:
+        resp_status = getattr(response, "status_code", None)
+        if resp_status == 429:
+            return True
+    return False
+
+
 def _call_agent(client: Anthropic, messages: list[dict],
                 verbose: bool = True) -> tuple[dict, object | None, dict]:
     """Send messages to the Claude agent and extract a ManagerDecision.
+
+    Includes retry logic for Claude API rate limits (429) with
+    exponential backoff and jitter.
 
     Args:
         client: Anthropic API client.
@@ -236,22 +312,51 @@ def _call_agent(client: Anthropic, messages: list[dict],
 
     Returns:
         Tuple of (decision_dict, final_message, call_metadata).
-        call_metadata contains tool_calls, token_usage, and agent_turns.
+        call_metadata contains tool_calls, token_usage, agent_turns,
+        and rate_limit_retries.
+
+    Raises:
+        Exception: Re-raised after exhausting rate-limit retries.
     """
     tool_calls: list[dict] = []
     total_input_tokens = 0
     total_output_tokens = 0
+    rate_limit_retries = 0
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
-        runner = client.beta.messages.tool_runner(
-            model="claude-sonnet-4-5-20250929",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=ALL_TOOLS,
-            output_format=ManagerDecision,
-            messages=messages,
-        )
+    # Retry loop for rate-limit (429) errors on the initial API call
+    runner = None
+    for rl_attempt in range(CLAUDE_MAX_RETRIES):
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
+                runner = client.beta.messages.tool_runner(
+                    model="claude-sonnet-4-5-20250929",
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    tools=ALL_TOOLS,
+                    output_format=ManagerDecision,
+                    messages=messages,
+                )
+            break  # Success -- exit retry loop
+        except Exception as exc:
+            if _is_rate_limit_error(exc):
+                rate_limit_retries += 1
+                retry_after = _extract_retry_after(exc)
+                logger.warning(
+                    "Claude API rate limit (429) on attempt %d/%d "
+                    "(Retry-After: %s)",
+                    rl_attempt + 1, CLAUDE_MAX_RETRIES,
+                    retry_after if retry_after is not None else "not set",
+                )
+                if verbose:
+                    print(f"    [Rate Limit] Claude API 429, retry {rl_attempt + 1}/{CLAUDE_MAX_RETRIES}")
+                if rl_attempt < CLAUDE_MAX_RETRIES - 1:
+                    _claude_backoff_sleep(rl_attempt, retry_after=retry_after)
+                    continue
+            raise  # Non-rate-limit error or retries exhausted
+
+    if runner is None:
+        raise RuntimeError("Failed to create agent runner after rate limit retries")
 
     turn = 0
     final_message = None
@@ -308,6 +413,7 @@ def _call_agent(client: Anthropic, messages: list[dict],
             "total_tokens": total_input_tokens + total_output_tokens,
         },
         "agent_turns": turn,
+        "rate_limit_retries": rate_limit_retries,
     }
 
     return decision_dict, final_message, call_metadata
