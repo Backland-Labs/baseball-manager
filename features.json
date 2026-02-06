@@ -489,5 +489,32 @@
       "Handle edge cases: game-over states (WP = 1.0 or 0.0), extreme scores, empty logs, missing WP data, home vs away perspective",
       "81 tests covering WP lookup, LI lookup, decision scoring, report generation, game log scoring, file loading, formatting, integration with game.py, and edge cases"
     ]
+  },
+  {
+    "category": "evaluation",
+    "name": "game_simulation_engine",
+    "passing": true,
+    "description": "A complete pitch-level baseball simulation engine that resolves play outcomes probabilistically based on player attributes and situational context. Enforces MLB rules, models pitcher fatigue and platoon advantages, tracks batter/pitcher statistics, generates play-by-play events, and uses seeded randomness for deterministic replay. Integrated with the agent decision loop in game.py for offline evaluation of managerial decisions without requiring live MLB data or a Claude API key.",
+    "steps": [
+      "Implement SimulationEngine class with seeded Random instance for deterministic replay",
+      "Resolve pitch outcomes (strike, ball, foul, contact) based on batter contact/eye and pitcher stuff/control attributes",
+      "Resolve ball-in-play outcomes: hit type (groundball, line drive, flyball, popup), direction (pull, center, opposite), and result (single, double, triple, home run, out, error)",
+      "Model pitcher fatigue based on pitch count vs stamina capacity and times-through-order penalty",
+      "Apply platoon factors for handedness matchups: opposite-hand bonus for batter, same-hand penalty",
+      "Resolve base runner advancement realistically based on hit type, runner speed, and defensive positioning",
+      "Enforce MLB rules: 3 strikes for strikeout, 4 balls for walk, 3 outs end half-inning, 9 innings with extra innings if tied, force plays, walk-off detection",
+      "Track batter game statistics (AB, H, 2B, 3B, HR, BB, K, R, RBI) and pitcher game statistics (IP, H, R, ER, BB, K, pitches, batters faced)",
+      "Generate detailed play-by-play PlayEvent entries with inning, outs, score, runners, and event description",
+      "Implement auto pitcher management when pitch count exceeds stamina-based capacity",
+      "Support stolen base resolution based on runner speed, catcher pop time, and pitcher hold attributes",
+      "Generate box scores with batting lines, pitching lines, and game summary from final GameState",
+      "Implement game_state_to_scenario() to convert simulation GameState to agent input format (MatchupState, RosterState, OpponentRosterState)",
+      "Implement validate_and_apply_decision() to apply agent managerial decisions (substitutions, stolen bases, bunts, IBB, positioning) to game state",
+      "Implement game_state_to_dict() for serializing full game state to JSON for logging",
+      "Integrate with game.py: run_agent_game() for agent-managed simulation, run_sim() for fully automated simulation via --sim CLI flag",
+      "SimPlayer.from_roster_dict() builds runtime player objects from sample_rosters.json with batter, pitcher, fielder, and catcher attribute blocks",
+      "Fielding attributes (range, arm strength, error rate) affect hit probability and error occurrence",
+      "38 tests covering player construction, deterministic replay, pitch/PA resolution, MLB rules, runner advancement, fatigue, platoon effects, stolen bases, box scores, play logs, serialization, realistic stat distributions, fielding effects, and errors"
+    ]
   }
 ]
