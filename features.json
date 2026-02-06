@@ -93,7 +93,7 @@
   {
     "category": "data",
     "name": "retrosheet_run_expectancy",
-    "passing": false,
+    "passing": true,
     "description": "Pre-computed run expectancy matrices and win probability tables derived from real Retrosheet play-by-play data. These static lookup tables back the run expectancy and win probability tools.",
     "steps": [
       "Include a data/compute_re_matrix.py script that parses Retrosheet event files and computes the 24-state run expectancy matrix",
