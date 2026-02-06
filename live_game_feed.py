@@ -3,6 +3,7 @@
 # dependencies = [
 #     "anthropic>=0.78.0",
 #     "pydantic>=2.0",
+#     "tweepy>=4.14",
 # ]
 # ///
 """Live game feed service for the baseball manager AI agent.
@@ -642,6 +643,7 @@ def run_live_game(
     fetch_fn: Any | None = None,
     client: Any | None = None,
     log_dir: Path | None = None,
+    tweet_poster: Any | None = None,
 ) -> GameFeedState:
     """Run the live game feed service for a single game.
 
@@ -658,6 +660,8 @@ def run_live_game(
         fetch_fn: Override for the feed fetch function (for testing).
         client: Anthropic client instance (created if needed).
         log_dir: Override for log file directory.
+        tweet_poster: Optional TweetPoster instance for posting decisions
+            to Twitter/X.  If None, tweets are not posted.
 
     Returns:
         Final GameFeedState with all logs.
@@ -773,6 +777,39 @@ def run_live_game(
                 else:
                     print(f"    >> {output.log_entry}")
 
+            # Post tweet for active decisions
+            if output and output.is_active and output.tweet_text and tweet_poster:
+                home_team = ""
+                away_team = ""
+                if result.feed:
+                    game_data = result.feed.get("gameData", {})
+                    teams_data = game_data.get("teams", {})
+                    home_team = teams_data.get("home", {}).get("name", "")
+                    away_team = teams_data.get("away", {}).get("name", "")
+
+                tweet_result = tweet_poster.post_decision(
+                    tweet_text=output.tweet_text,
+                    home_team=home_team,
+                    away_team=away_team,
+                    game_context={
+                        "home_team": home_team,
+                        "away_team": away_team,
+                        "inning": state.inning,
+                        "half": state.half,
+                    },
+                )
+                # Attach tweet result to the decision log
+                if state.decision_log:
+                    state.decision_log[-1]["tweet_result"] = tweet_result.to_dict()
+                if verbose:
+                    if tweet_result.success:
+                        if tweet_result.dry_run:
+                            print(f"    >> [TWEET DRY-RUN] {tweet_result.tweet_text}")
+                        else:
+                            print(f"    >> [TWEETED] id={tweet_result.tweet_id}")
+                    else:
+                        print(f"    >> [TWEET FAILED] {tweet_result.error}")
+
         # Wait before next poll
         time.sleep(interval)
 
@@ -790,6 +827,22 @@ def run_live_game(
             print(f"  Game log saved to: {log_path}")
     except Exception as exc:
         logger.error("Failed to write game log: %s", exc)
+
+    # Save tweet log if tweet poster was used
+    if tweet_poster and hasattr(tweet_poster, "tweet_log"):
+        try:
+            tweet_poster.tweet_log.game_pk = game_pk
+            tweet_poster.tweet_log.team = team
+            tweet_log_dir = (log_dir or Path(__file__).parent / "data" / "game_logs")
+            tweet_log_path = tweet_poster.tweet_log.save(log_dir=tweet_log_dir)
+            if verbose:
+                print(f"  Tweet log saved to: {tweet_log_path}")
+                tl = tweet_poster.tweet_log
+                print(f"  Tweets: {tl.successful_posts} posted, "
+                      f"{tl.failed_posts} failed, "
+                      f"{tl.dry_run_posts} dry-run")
+        except Exception as exc:
+            logger.error("Failed to write tweet log: %s", exc)
 
     return state
 
@@ -824,6 +877,14 @@ if __name__ == "__main__":
         "--quiet", action="store_true",
         help="Suppress verbose output",
     )
+    parser.add_argument(
+        "--tweet", action="store_true",
+        help="Post active decisions to Twitter/X (requires TWITTER_* env vars)",
+    )
+    parser.add_argument(
+        "--tweet-dry-run", action="store_true",
+        help="Log tweets without posting them (no Twitter credentials needed)",
+    )
 
     args = parser.parse_args()
 
@@ -837,10 +898,28 @@ if __name__ == "__main__":
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
+    # Set up tweet poster if requested
+    poster = None
+    if args.tweet or args.tweet_dry_run:
+        from tweet_integration import TweetPoster, TweetConfig
+
+        tweet_dry = args.tweet_dry_run or args.dry_run
+        config = TweetConfig.from_env()
+
+        if args.tweet and not tweet_dry and not config.is_configured():
+            print("Twitter credentials required for --tweet. "
+                  "Set TWITTER_API_KEY, TWITTER_API_SECRET, "
+                  "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET. "
+                  "(Or use --tweet-dry-run to log without posting.)")
+            sys.exit(1)
+
+        poster = TweetPoster(config=config, dry_run=tweet_dry)
+
     run_live_game(
         game_pk=args.game_pk,
         team=args.team,
         poll_interval=args.interval,
         dry_run=args.dry_run,
         verbose=not args.quiet,
+        tweet_poster=poster,
     )

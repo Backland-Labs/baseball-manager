@@ -417,7 +417,7 @@
   {
     "category": "functional",
     "name": "tweet_integration",
-    "passing": false,
+    "passing": true,
     "description": "Posts the agent's active decisions to Twitter/X during live games. Connects the decision output to the Twitter API.",
     "steps": [
       "Accept tweet-ready text from the decision output module",
