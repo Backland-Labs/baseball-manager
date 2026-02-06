@@ -121,7 +121,7 @@
   {
     "category": "tool",
     "name": "get_batter_stats",
-    "passing": false,
+    "passing": true,
     "description": "Retrieves real batting statistics from Statcast/FanGraphs for a player. Returns traditional stats, advanced metrics, plate discipline, batted ball profile, and sprint speed. Supports splits by handedness, home/away, and recency.",
     "steps": [
       "Accepts a player identifier (MLB player ID or name) and optional split parameters (vs_hand: L/R, home_away, recency_window)",
