@@ -231,7 +231,7 @@
   {
     "category": "tool",
     "name": "get_bullpen_status",
-    "passing": false,
+    "passing": true,
     "description": "Returns detailed status of all bullpen pitchers for the managed team. Combines roster availability from the game state with real season stats from Statcast/FanGraphs.",
     "steps": [
       "Reads bullpen availability from the RosterState input (availability, freshness, rest days, pitch counts)",
