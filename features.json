@@ -386,7 +386,7 @@
   {
     "category": "functional",
     "name": "error_handling",
-    "passing": false,
+    "passing": true,
     "description": "Handles failures gracefully across the system: MLB API errors, Statcast data unavailability, Claude API rate limits, invalid game state inputs, and tool execution failures.",
     "steps": [
       "MLB Stats API failures (connection errors, timeouts, 404s) return clear error messages without crashing",
