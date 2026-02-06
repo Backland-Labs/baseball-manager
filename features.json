@@ -252,6 +252,7 @@
   {
     "category": "functional",
     "name": "game_simulation_engine",
+    "status": "passing",
     "description": "The baseball simulation engine that resolves play outcomes based on player attributes, situational context, and probability distributions. It maintains the authoritative game state, enforces all baseball rules, and applies the agent's decisions.",
     "steps": [
       "Simulates outcomes at the pitch level: each event is a single pitch resulting in a ball, strike, foul, or ball in play",
