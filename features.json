@@ -161,6 +161,7 @@
   {
     "category": "tool",
     "name": "get_defensive_positioning",
+    "status": "passing",
     "description": "Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Includes spray chart summary, infield-in cost/benefit, and shift recommendations.",
     "steps": [
       "Accepts batter identifier, pitcher identifier, and current game situation (outs, runners, score, inning)",
