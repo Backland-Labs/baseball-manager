@@ -192,6 +192,7 @@
   {
     "category": "tool",
     "name": "get_platoon_comparison",
+    "status": "passing",
     "description": "Compares a potential pinch hitter against the current batter for the active matchup. Returns projected wOBA for each, platoon advantage delta, defensive cost, and bench depth impact.",
     "steps": [
       "Accepts the current batter identifier and the potential pinch hitter identifier",
