@@ -127,6 +127,7 @@
   {
     "category": "tool",
     "name": "get_bullpen_status",
+    "status": "passing",
     "description": "Returns detailed status of all bullpen pitchers including availability, stats, freshness, rest days, recent pitch counts, platoon splits, and warm-up status.",
     "steps": [
       "Returns all bullpen pitchers for the managed team",
