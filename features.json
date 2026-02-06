@@ -1,5 +1,21 @@
 [
   {
+    "category": "architecture",
+    "name": "repo_setup",
+    "description": "Bootstrap the project repository with the initial directory structure, main entry point script, and foundational modules. Creates game.py as a single-file UV script with inline PEP 723 metadata, the tools/ directory with placeholder files for all 12 tools, the player data model, the game state model, and the ManagerDecision output schema. After this feature is complete, the project skeleton is in place and all other features build on top of it.",
+    "steps": [
+      "Create game.py as the main entry point with a PEP 723 inline metadata block declaring dependencies (anthropic, pydantic)",
+      "Create the tools/ directory with an __init__.py and one .py file per tool (all 12 tools as stubs that return placeholder JSON)",
+      "Define the MatchupState, RosterState, and OpponentRosterState data models as Pydantic classes in a models.py file, matching the schemas from DESIGN.md",
+      "Define the ManagerDecision Pydantic model as the structured output schema in models.py",
+      "Define the Player, Batter, Pitcher, and Fielder data models in models.py with all attributes specified in the player_data_model feature",
+      "Create a sample roster JSON file (data/sample_rosters.json) with two complete 26-man rosters for testing",
+      "Wire up game.py to instantiate the Claude Agent SDK client, register all 12 tool stubs, and run a single-turn test that sends a minimal scenario and receives a ManagerDecision response",
+      "Verify the project runs end-to-end with 'uv run game.py' -- the agent receives a scenario, can call stub tools, and returns a valid ManagerDecision",
+      "All files follow the single-file UV script convention where applicable (game.py has inline metadata; supporting modules are importable from game.py)"
+    ]
+  },
+  {
     "category": "tool",
     "name": "get_batter_stats",
     "description": "Retrieves batting statistics for a player, including traditional stats, advanced metrics, plate discipline, batted ball profile, and sprint speed. Supports splits by handedness, home/away, and recency windows.",
