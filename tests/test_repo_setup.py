@@ -93,7 +93,7 @@ class TestStep2ToolsDirectory:
     def test_exactly_12_tool_files(self):
         tool_files = [
             f for f in (PROJECT_ROOT / "tools").glob("*.py")
-            if f.name not in ("__init__.py", "response.py")
+            if f.name not in ("__init__.py", "response.py", "validation.py")
         ]
         assert len(tool_files) == 12
 
