@@ -276,7 +276,7 @@
   {
     "category": "tool",
     "name": "get_defensive_replacement_value",
-    "passing": false,
+    "passing": true,
     "description": "Evaluates the net value of a defensive substitution by comparing the defensive upgrade against the offensive downgrade, scaled by estimated innings remaining. Uses real defensive metrics from Statcast.",
     "steps": [
       "Accepts the current fielder identifier and the potential replacement identifier",
