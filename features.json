@@ -357,7 +357,7 @@
   {
     "category": "functional",
     "name": "decision_output",
-    "passing": false,
+    "passing": true,
     "description": "Formats the agent's decision for output. Active decisions are formatted as tweet-ready text. All decisions (active and no-action) are logged for analysis.",
     "steps": [
       "If the agent made an active decision, extract the tweet-ready portion of the response",
