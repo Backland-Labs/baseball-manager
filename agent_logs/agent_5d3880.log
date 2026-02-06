@@ -1,0 +1,15 @@
+The `get_defensive_positioning` feature is now fully implemented, tested, and committed. Here's a summary of what was done:
+
+**Feature: get_defensive_positioning** (tool)
+
+**Implementation** (`tools/get_defensive_positioning.py`):
+- Loads player data from `sample_rosters.json` with the standard roster loading pattern
+- Derives spray chart tendencies from batter attributes (power, contact) and matchup handedness (same-side vs opposite-side, switch hitter handling)
+- Derives ground ball rate from batter power and pitcher stuff
+- Recommends infield positioning based on game situation: standard, double_play_depth (runner on 1st, <2 outs), infield_in (runner on 3rd, trailing/tied), halfway (compromise), guard_lines (late close game)
+- Recommends outfield positioning: standard, deep (power hitters), shallow (low-power contact), no_doubles (late close game with RISP), shaded_pull/shaded_oppo
+- Computes infield-in cost/benefit analysis (runs saved at home vs extra hits allowed)
+- Generates shift recommendations compliant with MLB 2-and-2 rule (no outright shifts, only legal shading within zones)
+- Full input validation for player IDs, outs, inning, and player type checks
+
+**Tests** (`tests/test_get_defensive_positioning.py`): 70 tests covering all 7 feature steps plus helper functions and integration scenarios. All passing.

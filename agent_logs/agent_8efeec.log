@@ -1,0 +1,27 @@
+Done. Here's a summary of what was implemented:
+
+## Feature: `decision_logging`
+
+**What was implemented:**
+
+1. **Modified `_call_agent`** (`game.py:245`) -- Now tracks tool calls (tool name + input parameters) and accumulates token usage (input/output tokens) across all agent turns in a single invocation. Returns a 3-tuple: `(decision_dict, final_message, call_metadata)`.
+
+2. **Modified `run_agent_decision`** (`game.py:322`) -- Captures wall-clock latency via `time.time()`, aggregates tool call lists and token usage across retries, and returns a 3-tuple: `(decision_dict, messages, decision_metadata)`.
+
+3. **Added `build_decision_log_entry`** (`game.py:421`) -- Constructs a comprehensive structured log entry containing:
+   - Full game state at decision time (inning, half, outs, score, runners, batter, pitcher, situation display)
+   - All tool calls the agent made with their parameters
+   - The agent's full decision response (type, action details, confidence, reasoning, key factors, risks)
+   - Active vs no-action classification
+   - Token usage (input, output, total)
+   - Latency in milliseconds
+   - Agent turns and retry count
+   - Timestamp for live game correlation
+
+4. **Added `write_game_log`** (`game.py:476`) -- Writes structured JSON log files organized by game to `data/game_logs/`, with game info header (teams, seed, final score, winner) and aggregate summary statistics (total decisions, active count, token totals, latency totals).
+
+5. **Updated `run_agent_game`** to use the new logging infrastructure.
+
+6. **Added 81 tests** in `tests/test_decision_logging.py` covering all 7 feature requirements.
+
+**All 837 tests pass** (756 existing + 81 new).

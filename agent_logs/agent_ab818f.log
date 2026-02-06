@@ -1,0 +1,18 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_platoon_comparison`** -- the last remaining tool (12 of 12)
+
+**Implementation** (`tools/get_platoon_comparison.py`):
+- Loads roster data with team-aware bench tracking (`_PLAYERS`, `_TEAM_BENCH`, `_PLAYER_TEAM`)
+- `_derive_projected_woba_vs_pitcher()` -- projects wOBA for a batter against a specific pitcher handedness, applying MLB platoon adjustments (+0.018 for opposite-hand, -0.018 for same-hand, +0.008 for switch hitters) plus personal split modifiers derived from `avg_vs_l`/`avg_vs_r`
+- `_derive_wrc_plus()` -- converts wOBA to wRC+ (100 = league average)
+- `_derive_oaa()` -- computes OAA from fielder attributes (mirrors `get_defensive_replacement_value`)
+- `_compute_defensive_cost()` -- evaluates defensive impact of the substitution (OAA difference, position fit, wOBA-equivalent cost)
+- `_compute_bench_depth_impact()` -- counts remaining bench players by handedness after the substitution
+- Full input validation: invalid player IDs, non-pitcher pitcher_id
+
+**Tests** (`tests/test_get_platoon_comparison.py`):
+- 63 tests covering all 7 feature steps, helper functions, and integration scenarios
+- All 618 tests across the full test suite pass with no regressions
+
+**Committed and pushed** to `main`.

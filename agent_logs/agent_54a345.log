@@ -1,0 +1,20 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `evaluate_stolen_base`** -- now marked as `"status": "passing"` in features.json.
+
+**Implementation** (`tools/evaluate_stolen_base.py`):
+- Loads player data from `data/sample_rosters.json` (same pattern as other tools)
+- Derives sprint speed from batter speed attribute (23-31 ft/s range)
+- Derives stolen base success rate from speed (55%-92% range)
+- Derives pitcher hold time from control + velocity attributes (delivery time + pitch flight time)
+- Gets catcher pop time from explicit catcher attributes or derives from arm strength
+- Estimates success probability by combining career SB rate with adjustments for pitcher hold time, catcher pop time, sprint speed, and target base
+- Computes breakeven rate from the run expectancy matrix
+- Computes RE change for success and caught stealing scenarios
+- Computes net expected RE change weighted by success probability
+- Returns favorable/marginal/unfavorable recommendation based on margin above breakeven
+- Validates all player IDs, target base, outs, and situational consistency (can't steal 2nd without runner on 1st, etc.)
+
+**Tests** (`tests/test_evaluate_stolen_base.py`): 58 tests covering all 7 feature requirements plus derived metric helpers and integration scenarios. All pass.
+
+**Regression**: All 209 tests across all 6 test suites pass. Dry-run validation passes.

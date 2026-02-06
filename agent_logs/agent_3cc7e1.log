@@ -1,0 +1,15 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_pitcher_fatigue_assessment`** -- now marked as `passing` in `features.json`.
+
+**What it does:**
+- Accepts a pitcher ID plus in-game state parameters (pitch count, innings pitched, times through order, runs allowed)
+- Derives **velocity decline** from pitch count and stamina (accelerates past 75 pitches, clamped to -4.0 mph max)
+- Derives **spin rate decline** from pitch count, stuff, and stamina (clamped to -300 RPM max)
+- Derives **batted ball quality trend** -- per-inning average exit velocity against, rising as the pitcher fatigues
+- Returns **pitch count by inning** with a rising-trend distribution based on stamina
+- Returns **times-through-order wOBA** splits (1st, 2nd, 3rd+) with stamina-dependent penalty
+- Returns an **overall fatigue level** (fresh/normal/fatigued/gassed) based on stamina-adjusted thresholds plus TTO penalty
+- Validates inputs and returns structured errors for invalid player IDs, non-pitchers, pitchers not in game, and invalid parameters
+
+**Testing:** 71 tests covering all 8 feature steps, helper function unit tests, and integration tests. All pass, and all pre-existing tests (395 total across 9 test files) continue to pass.

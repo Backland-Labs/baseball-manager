@@ -1,0 +1,22 @@
+The **error_handling** feature has been fully implemented and verified. Here's a summary of what was done:
+
+**Changes made:**
+
+1. **`game.py`** -- Three new functions and one refactored function:
+   - `_peek_validate()` -- Validates a decision against game state **without modifying** anything. Mirrors the same checks as `validate_and_apply_decision` but returns early with valid/invalid status only.
+   - `_call_agent()` -- Extracted helper that handles the Claude API call and structured output extraction.
+   - `run_agent_decision()` -- Refactored with a **retry loop**: after getting the agent's decision, it pre-validates using `_peek_validate()`. If invalid, it sends the error message back to the agent and asks it to try again. After `max_retries` (default 5) consecutive failures, it forces NO_ACTION.
+   - `run_agent_game()` -- Simplified (removed old dead-letter retry code), added separate `error_log` list that tracks errors independently from the play-by-play `play_log`. Decision log now saves both decisions and errors to the JSON file.
+
+2. **`features.json`** -- Marked `error_handling` as `"status": "passing"`.
+
+3. **`tests/test_error_handling.py`** -- 30 tests covering all 7 feature requirements:
+   - Tool error messages (4 tests)
+   - Invalid decision error + retry support (3 tests)
+   - State immutability on failure (4 tests)
+   - Peek validate & retry logic (5 tests)
+   - Errors not in play-by-play (2 tests)
+   - Common error scenarios (10 tests)
+   - Integration tests (2 tests)
+
+All 30 new tests pass, and all 625+ existing tests across 15 test files continue to pass.

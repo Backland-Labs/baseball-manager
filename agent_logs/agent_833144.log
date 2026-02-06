@@ -1,0 +1,20 @@
+The **agent_system_prompt** feature is now fully implemented, tested, and pushed. Here's a summary of what was done:
+
+**Feature: `agent_system_prompt`**
+
+**Changes made:**
+
+1. **AGENT_PROMPT.md** -- Rewrote from scratch as a comprehensive baseball manager system prompt containing:
+   - Agent identity as MLB team manager
+   - All 12 tools listed with descriptions of when to use each
+   - Analytical constants: TTO penalty (wOBA increases by TTO), platoon splits (0.030-0.040 wOBA gap), stolen base breakeven rates (71.5%/74.4%/77.5%), leverage index thresholds (0.5/1.5/2.5), odds ratio formula
+   - All 9 MLB rules: 3-batter minimum, runner on 2nd in extras, mound visit limit, pitch timer, pickoff limit, infield positioning, universal DH, replay challenge, removed players cannot return
+   - Decision types (offensive, pitching, defensive, other)
+   - Output format (ManagerDecision with confidence, reasoning, key_factors, risks)
+   - Key principles including "most at-bats require no action"
+
+2. **game.py** -- Replaced hardcoded `SYSTEM_PROMPT` string with `load_system_prompt()` function that reads from `AGENT_PROMPT.md` at runtime. Supports custom path for testing.
+
+3. **tests/test_agent_system_prompt.py** -- 59 tests across 10 test classes covering all 9 feature steps plus integration tests (dry-run validation).
+
+**Results:** All 1270 tests pass (59 new + 1211 existing).

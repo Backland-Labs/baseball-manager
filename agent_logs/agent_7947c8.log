@@ -1,0 +1,17 @@
+The `get_defensive_replacement_value` feature is fully implemented, tested, and pushed. Here's a summary of what was done:
+
+**Feature:** `get_defensive_replacement_value` (tool)
+
+**Implementation (`tools/get_defensive_replacement_value.py`):**
+- Loads roster data from `sample_rosters.json` with lazy caching
+- `_derive_oaa()` - Computes Outs Above Average from fielder range, arm strength, error rate, and position fit (with out-of-position penalty and position-specific arm weighting)
+- `_derive_projected_woba()` - Projects wOBA from batter contact, power, eye, and speed attributes
+- `_derive_wrc_plus()` - Converts wOBA to wRC+ (100 = league average)
+- `_estimate_innings_remaining()` - Calculates defensive innings left from game state (inning, half, outs)
+- `_compute_net_value()` - Combines defensive upgrade (OAA scaled to remaining innings) with offensive cost (wOBA-to-runs conversion)
+- `_recommendation()` - Returns "favorable", "marginal", or "unfavorable" based on net value thresholds
+- Full input validation: player IDs, position, inning, half, outs
+
+**Tests (`tests/test_get_defensive_replacement_value.py`):**
+- 90 tests covering all 8 feature steps, helper function unit tests, and integration tests
+- All passing

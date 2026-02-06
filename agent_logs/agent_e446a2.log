@@ -1,0 +1,28 @@
+The **game_completion** feature has been implemented and pushed. Here's a summary of what was done:
+
+**Feature: `game_completion`** -- now marked as `passing` in features.json
+
+**Changes made:**
+
+1. **`simulation.py`** -- 4 changes:
+   - Added `errors: int = 0` field to `TeamState` for tracking fielding errors
+   - Added error counting in `apply_pa_result` when a PA result is "error" (increments fielding team's error count)
+   - Fixed walk-off inning run recording bug in two locations (`apply_pa_result` walk-off path and `validate_and_apply_decision` IBB walk-off path) -- the `_current_inning_runs` were not being saved to the `inning_runs` array before the game ended, causing score/inning-sum mismatches
+   - Added `total_errors` to `generate_box_score` output and updated `print_box_score` to display the R/H/E header format
+   - Added `generate_decisions_summary()` method that extracts decision events from the play log and formats them with situation context (inning, outs, score)
+
+2. **`game.py`** -- 2 changes:
+   - Integrated decisions summary printing into `run_agent_game()` after box score
+   - Integrated decisions summary printing into `run_sim()` after box score
+
+3. **`tests/test_game_completion.py`** -- 29 new tests covering all 8 feature steps:
+   - Steps 1-2: Game ends correctly for home/away wins after 9 innings
+   - Step 3: Extra innings when tied after 9
+   - Step 4: Bottom of inning skipped when home leads
+   - Step 5: Walk-off ends game immediately with correct scoring
+   - Step 6: Box score includes R/H/E, inning runs, batting/pitching lines
+   - Step 7: Managerial decisions summary generation
+   - Step 8: Complete play-by-play log and serializable game state
+   - Cross-cutting consistency tests across 20-30 game seeds
+
+**Final test count: 726 passing (697 original + 29 new)**

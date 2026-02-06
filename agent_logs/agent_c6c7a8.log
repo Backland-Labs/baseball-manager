@@ -1,0 +1,18 @@
+The `claude_agent_sdk` feature is now complete. Here's a summary of what was done:
+
+**Feature implemented:** `claude_agent_sdk` (architecture)
+
+**What was verified:** The agent is built on the Claude Agent SDK. The implementation already existed in `game.py` -- the work was writing 92 comprehensive tests that verify all 8 feature steps:
+
+1. **SDK client instantiation** -- `Anthropic()` is used in `game.py`, declared as a PEP 723 dependency
+2. **12 tools registered with schemas** -- All tools use `@beta_tool` decorator, have docstrings, return JSON strings, and are passed to `tool_runner`
+3. **SDK conversation loop** -- `client.beta.messages.tool_runner()` manages the multi-turn loop with message history
+4. **System prompt** -- Establishes baseball manager identity, lists decision types, references MLB rules (3-batter minimum, mound visits), analytical tools, and no-action defaults
+5. **Tool result mechanism** -- Tools return JSON strings via the SDK's `beta_tool` protocol, tool calls are tracked in metadata
+6. **Multiple tools per turn** -- All content blocks are iterated, tool calls accumulated in a list
+7. **Structured decision output** -- `ManagerDecision` model with `output_format` parameter, fallback to NO_ACTION
+8. **Retry and error handling** -- `_peek_validate` for non-mutating validation, retry loop with `max_retries`, forced NO_ACTION after exhaustion
+
+**Files changed:**
+- `tests/test_claude_agent_sdk.py` (new, 92 tests)
+- `features.json` (marked `claude_agent_sdk` as passing)

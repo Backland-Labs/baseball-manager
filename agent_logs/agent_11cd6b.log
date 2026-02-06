@@ -1,0 +1,15 @@
+Done. Here's a summary of what was accomplished:
+
+**Feature implemented: `single_file_uv_scripts`**
+
+**Changes made:**
+- Added PEP 723 inline metadata blocks (`# /// script` with `requires-python` and `dependencies`) to all 13 tool files (`tools/__init__.py` + 12 tool scripts) that were missing them
+- Created `tests/test_single_file_uv_scripts.py` with 211 comprehensive tests covering all 5 feature steps:
+  1. Every `.py` file has a PEP 723 block at the start with `requires-python` and `dependencies`
+  2. Scripts execute via `uv run` (dry-run and sim modes verified)
+  3. No `requirements.txt`, `pyproject.toml`, `setup.py`, `setup.cfg`, or `Pipfile` exists
+  4. All third-party dependencies (`anthropic`, `pydantic`) declared inline with version constraints
+  5. Main entry point (`game.py`) runs with `uv run game.py --dry-run` and `--sim`
+- Marked `single_file_uv_scripts` as `passing: true` in `features.json`
+- All 1206 tests pass (211 new + 995 existing, zero regressions)
+- Committed and pushed to remote

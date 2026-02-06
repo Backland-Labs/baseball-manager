@@ -1,0 +1,15 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `evaluate_sacrifice_bunt`**
+
+The tool was upgraded from a placeholder stub (91 lines with hard-coded values) to a fully roster-backed implementation (457 lines) that:
+
+1. **Accepts** batter identifier, base-out state, score differential, and inning
+2. **Returns expected runs** for bunting vs swinging away, computed from the RE matrix with a probabilistic outcome model (successful sacrifice, bunt hit, fielder's choice, failed bunt), weighted by the batter's proficiency
+3. **Returns probability of scoring at least one run** for both strategies using the `PROB_AT_LEAST_ONE` table
+4. **Returns bunt proficiency** derived from player attributes (contact 50%, speed 30%, inverse power 20%)
+5. **Returns net expected value** (bunt RE minus swing RE)
+6. **Returns contextual recommendations** that account for: late/close game situations, squeeze opportunities, batter proficiency, 2-out situations, and general RE comparisons
+7. **Returns errors** for invalid player IDs, non-batters, invalid outs/inning, and no-runner situations
+
+**Tests:** 54 tests covering all 7 feature requirements plus edge cases (bases loaded, extra innings, bench/away players). All pass. Existing test suites unaffected.

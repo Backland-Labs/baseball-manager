@@ -1,0 +1,27 @@
+The `game_simulation_engine` feature has been fully implemented, tested, and pushed. Here's a summary of what was built:
+
+**File: `simulation.py`** - The complete baseball simulation engine containing:
+
+- **SimPlayer**: Runtime player representation built from roster JSON data
+- **BatterGameStats / PitcherGameStats**: In-game stat tracking with proper PA/IP calculations
+- **BaseRunner**: Base runner representation with player reference and base position
+- **PlayEvent**: Play-by-play event records
+- **TeamState / GameState**: Full mutable game state tracking lineups, bullpens, scores, runners, and substitution history
+- **SimulationEngine**: The core engine with:
+  - **Pitch-level resolution**: Each pitch is ball/strike/foul/in-play/HBP based on batter contact, pitcher stuff/control, and fatigue
+  - **Ball-in-play resolution**: Batted ball type (GB/LD/FB/popup), direction (pull/center/oppo), and hit determination using player attributes
+  - **Baserunner advancement**: Realistic runner movement based on hit type and speed (runners on 3rd score on singles, doubles clear bases, etc.)
+  - **Walk/HBP resolution**: Proper force-advancement of runners (bases-loaded walks score runs)
+  - **Double play mechanics**: DP probability based on runner and batter speed
+  - **Error handling**: Errors based on fielder error rates
+  - **Pitcher fatigue model**: Effectiveness degrades with pitch count relative to stamina
+  - **Platoon advantage**: Same-hand matchups favor the pitcher, opposite favor the batter
+  - **Defensive positioning effects**: Better fielding range reduces hit probability
+  - **Auto pitcher management**: Pulls tired pitchers based on stamina-derived thresholds
+  - **Stolen base resolution**: Success probability based on runner speed, catcher pop time, and target base
+  - **9-inning games with extras**: Proper half-inning transitions, walk-off detection, and extra innings when tied
+  - **Deterministic seeding**: Same seed produces identical games
+  - **Box score generation**: Full formatted box score with line score, batting lines, and pitching lines
+  - **Game state serialization**: JSON export for persistence
+
+**File: `tests/test_simulation.py`** - 38 comprehensive tests covering all feature requirements, all passing.

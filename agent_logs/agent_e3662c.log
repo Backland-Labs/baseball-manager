@@ -1,0 +1,26 @@
+Done. Here's a summary of what was implemented for the **agent_decision_loop** feature:
+
+**What was built:**
+
+1. **`game_state_to_scenario()`** in `simulation.py` -- Converts the simulation engine's `GameState` into the agent-compatible format with `matchup_state`, `roster_state`, `opponent_roster_state`, and a natural-language `decision_prompt` describing the situation.
+
+2. **`validate_and_apply_decision()`** in `simulation.py` -- Validates and applies all decision types against MLB rules:
+   - `NO_ACTION` / `SWING_AWAY` -- always valid
+   - `PITCHING_CHANGE` -- enforces 3-batter minimum, checks bullpen availability
+   - `PINCH_HIT` -- validates bench player availability, handles substitution
+   - `STOLEN_BASE` -- validates eligible runners, resolves steal attempt
+   - `INTENTIONAL_WALK` -- issues IBB with proper stat tracking
+   - `DEFENSIVE_POSITIONING`, `MOUND_VISIT`, `SACRIFICE_BUNT`, `PINCH_RUN`, `REPLAY_CHALLENGE`
+
+3. **`run_agent_game()`** in `game.py` -- The core game loop that:
+   - Initializes a game via the simulation engine
+   - At each plate appearance, converts game state to a scenario and sends it to the Claude agent
+   - Processes tool calls (all 12 tools) and receives a `ManagerDecision`
+   - Validates and applies the decision, then simulates the plate appearance
+   - Manages context window by trimming conversation history
+   - Logs all decisions with timestamps to a JSON file
+   - Handles the opposing team via automated management
+
+4. **41 comprehensive tests** in `tests/test_agent_decision_loop.py` covering scenario conversion, all decision types, state integrity, player ID extraction, and full game simulations with decisions.
+
+**Test results:** 41/41 pass, plus 38/38 existing simulation tests pass (no regressions).

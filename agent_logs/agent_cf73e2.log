@@ -1,0 +1,17 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_bullpen_status`**
+
+The tool was upgraded from a hardcoded stub returning 2 placeholder pitchers to a full roster-backed implementation. Key capabilities:
+
+1. **Loads from roster data** - Reads all bullpen pitchers from `sample_rosters.json` for either the home or away team
+2. **Availability tracking** - Derives availability from workload rules (3 consecutive days, extreme pitch counts, same-day high usage) with stamina-adjusted thresholds
+3. **Role classification** - Returns each pitcher's role (CLOSER, SETUP, MIDDLE, LONG, MOPUP), sorted by priority
+4. **Freshness derivation** - Computes FRESH/MODERATE/TIRED from 3-day pitch counts, days rest, and stamina attribute
+5. **Days since last appearance** - Deterministic per-pitcher values consistent with pitch count history
+6. **Pitch counts last 3 days** - Role-appropriate usage patterns (closers: 12-20, setup: 15-25, long: 40-50)
+7. **Platoon splits** - Derives ERA, WHIP, wOBA-against, K%, and BB% vs LHB and vs RHB from pitcher attributes
+8. **Warmup state** - Accepts `warming_pitcher_ids` and `ready_pitcher_ids` parameters to track cold/warming/ready
+9. **Used pitcher exclusion** - Accepts `used_pitcher_ids` to exclude pitchers already removed from the game
+
+**Tests: 61 tests, all passing** - Covering every feature requirement plus integration tests and helper function validation.

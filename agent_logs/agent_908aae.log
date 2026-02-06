@@ -1,0 +1,16 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_win_probability`** -- now marked as `passing` in `features.json`.
+
+**What was done:**
+- The tool already had a substantial implementation in progress (uncommitted). I reviewed it, fixed a calibration issue in the leverage index computation, wrote comprehensive tests, and committed.
+
+**Key implementation details:**
+- Uses pre-computed base WP tables for away team by `(inning, half)` with adjustments for score differential (logistic scaling), base-out state (from RE matrix), and outs
+- Score differential effect scales with innings remaining -- a 1-run lead matters more in the 9th than the 1st
+- Leverage index is computed as the WP swing for the current state relative to the model's own average swing across representative game states (calibrated at module load time)
+- Conditional WPs computed for "run scores" and "inning ends scoreless" scenarios
+- Supports home/away perspective via `managed_team_home` parameter (defaults to away)
+- All 7 feature steps verified with 44 passing tests
+
+**Fix applied:** The original LI computation used a hardcoded `avg_swing = 0.038` (empirical MLB value), but this constant was inconsistent with the model's own WP function, producing inflated LI values (4-10x too high). Replaced with a dynamically computed average swing from the model itself, ensuring LI = 1.0 for average situations.

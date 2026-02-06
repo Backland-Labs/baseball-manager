@@ -1,25 +1,53 @@
 # Baseball Manager AI Agent -- Design Document
 
-GOAL: build an AI agent that makes in game decisions as a manager of a baseball team 
-
-## Overview
-
-This document specifies the datasets, tools, game state model, and agent architecture needed to build an AI baseball manager using the Claude Agent SDK. The agent receives a game scenario at a decision point and produces a reasoned managerial decision.
+GOAL: Build an AI agent that watches live MLB games and tweets real-time managerial decisions. The agent receives game state before each at-bat, analyzes the situation using real player data, and outputs a plain-text decision describing what it would do as the team's manager.
 
 ---
 
-## 1. Decision Points the Agent Must Handle
+## 1. Overview
 
-The agent must be able to respond at any of the following decision points during a game:
+The agent operates as a reactive decision-maker during live MLB games. An external service polls the MLB Stats API for game state updates and pushes the current situation to the agent before each at-bat. The agent:
 
-### Pre-Game
-| Decision | Key Inputs |
-|----------|-----------|
-| Lineup construction (batting order) | Platoon splits vs opposing starter, wOBA/wRC+, defensive requirements |
-| Starting pitcher selection | Matchup history, rest days, opponent lineup handedness |
-| Defensive positioning plan | Opponent spray charts, batter tendencies |
+1. Receives the current game state (matchup, rosters, situation)
+2. Calls information-gathering tools to analyze the situation (player stats, matchup data, win probability, etc.)
+3. Outputs a plain-text managerial decision suitable for tweeting
 
-### Offensive (When Team is Batting)
+The agent manages one specific team per game. Most at-bats require no action (let the current lineup play). When the situation warrants it, the agent makes an active decision: pitching change, pinch hit, stolen base attempt, defensive repositioning, etc.
+
+---
+
+## 2. Architecture
+
+```
+MLB Stats API (live game feed)
+        |
+        v
+External Service
+  - Polls live feed (~10s interval)
+  - Detects new at-bats and state changes
+  - Converts MLB API response to agent input models
+        |
+        v
+Agent (Claude + tools)
+  - Receives MatchupState + RosterState + OpponentRosterState
+  - Calls tools for analytical context (real stats, matchups, probabilities)
+  - Outputs plain-text decision
+        |
+        v
+Decision Output
+  - Tweets active decisions to Twitter/X
+  - Logs all decisions (active and no-action) for analysis
+```
+
+The agent is stateless per invocation. Each at-bat is an independent decision. The external service maintains game context (substitution history, bullpen usage, mound visits, etc.) and passes it as part of the game state input.
+
+---
+
+## 3. Decision Points the Agent Must Handle
+
+The agent evaluates the situation before each at-bat and decides whether to take action. The following are the categories of decisions it may make:
+
+### Offensive (When Managed Team is Batting)
 | Decision | Key Inputs |
 |----------|-----------|
 | Sacrifice bunt | Run expectancy matrix, batter quality, outs, runners, score differential, inning |
@@ -30,7 +58,7 @@ The agent must be able to respond at any of the following decision points during
 | Hit-and-run | Batter contact rate, runner speed, count, ground ball tendency |
 | Squeeze play | Runner on 3rd, batter bunt proficiency, outs, score |
 
-### Pitching (When Team is Fielding)
+### Pitching (When Managed Team is Fielding)
 | Decision | Key Inputs |
 |----------|-----------|
 | Pull the starter | Pitch count, times through order (TTO), velocity trend, spin trend, batted ball quality trend, upcoming hitters |
@@ -53,15 +81,11 @@ The agent must be able to respond at any of the following decision points during
 
 ---
 
-## 2. Game State Model
+## 4. Game State Model
 
-The agent receives three data structures as direct input with every scenario: the **MatchupState**, the **RosterState**, and the **OpponentRosterState**. Analytical context (win probability, leverage index, run expectancy) is NOT passed directly -- the agent must derive it by calling tools.
+The agent receives three data structures as input with every at-bat: the **MatchupState**, the **RosterState**, and the **OpponentRosterState**. These are populated by the external service from the MLB Stats API live game feed. Analytical context (win probability, leverage index, run expectancy) is NOT passed directly -- the agent must derive it by calling tools.
 
-### What the Agent Receives as Input
-
-The following three structures are passed to the agent as part of the scenario prompt. The agent does not need to call tools to obtain this information.
-
-#### MatchupState (passed as input)
+### MatchupState (passed as input)
 
 Contains the current game situation and the active batter/pitcher matchup.
 
@@ -81,6 +105,7 @@ MatchupState {
 
     score: {home: int, away: int}
     batting_team: "HOME" | "AWAY"
+    managed_team: "HOME" | "AWAY"
 
     // Current matchup
     batter: {
@@ -100,9 +125,9 @@ MatchupState {
 }
 ```
 
-#### RosterState (passed as input)
+### RosterState (passed as input)
 
-Contains the agent's own team roster availability.
+Contains the managed team's roster availability.
 
 ```
 RosterState {
@@ -129,7 +154,7 @@ RosterState {
 }
 ```
 
-#### OpponentRosterState (passed as input)
+### OpponentRosterState (passed as input)
 
 Contains the opposing team's roster availability.
 
@@ -142,45 +167,28 @@ OpponentRosterState {
 }
 ```
 
-### What the Agent Must Derive via Tools
-
-The following analytical context is NOT provided as input. The agent is expected to call tools to compute or look up these values as part of its decision-making process:
-
-- **Win probability** -- via `get_win_probability` tool
-- **Leverage index** -- returned by `get_win_probability` tool
-- **Run expectancy** -- via `get_run_expectancy` tool
-- **Stolen base breakeven analysis** -- via `evaluate_stolen_base` tool
-- **Bunt evaluation** -- via `evaluate_sacrifice_bunt` tool
-- **Player statistics and splits** -- via `get_batter_stats`, `get_pitcher_stats` tools
-- **Matchup projections** -- via `get_matchup_data` tool
-- **Pitcher fatigue assessment** -- via `get_pitcher_fatigue_assessment` tool
-- **Defensive positioning recommendations** -- via `get_defensive_positioning` tool
-- **Platoon comparisons** -- via `get_platoon_comparison` tool
-
-This design forces the agent to actively gather analytical context before making decisions, rather than having it pre-computed. The agent must decide which tools to call based on the decision at hand.
-
 ---
 
-## 3. Tools
+## 5. Tools
 
-Tools are the agent's mechanism for gathering additional context and analytical data beyond what is provided in the input game state. They are strictly informational -- tools allow the agent to look up statistics, compute probabilities, and evaluate scenarios. Tools do NOT execute game actions or decisions. The agent's decision is expressed through its structured response output (the `ManagerDecision` schema), which the simulation engine interprets and applies to the game state.
+Tools are the agent's mechanism for gathering analytical context beyond what is provided in the input game state. They are strictly informational -- tools query real MLB data sources (Statcast, FanGraphs, MLB Stats API) to provide statistics, projections, and evaluations. The agent's decision is expressed through its plain-text response, not via tool calls.
 
-Each tool is a standalone Python or TypeScript script. The agent passes arguments and receives structured JSON output.
+Each tool is a standalone Python script in the `tools/` directory. The agent passes arguments and receives structured JSON output.
 
 ### Player Statistics
 
 | Tool | Description |
 |------|-------------|
-| `get_batter_stats` | Retrieves batting statistics for a player, including traditional stats (AVG/OBP/SLG), advanced metrics (wOBA, wRC+, barrel rate, xwOBA), plate discipline (K%, BB%, chase rate, whiff rate), batted ball profile (GB%, pull%, EV, LA), and sprint speed. Supports splits by handedness, home/away, and recency windows. |
-| `get_pitcher_stats` | Retrieves pitching statistics for a pitcher, including ERA/FIP/xFIP, K% and BB%, ground ball rate, pitch mix with per-pitch velocity/spin/whiff rates, and times-through-order wOBA splits. Supports splits by batter handedness, home/away, and recency windows. |
-| `get_matchup_data` | Retrieves head-to-head batter vs pitcher history and similarity-based projections. Returns direct matchup results, a sample-size reliability indicator, similarity-model projected wOBA (for small samples), and pitch-type vulnerability breakdown. |
+| `get_batter_stats` | Retrieves real batting statistics from Statcast/FanGraphs: traditional stats (AVG/OBP/SLG), advanced metrics (wOBA, wRC+, barrel rate, xwOBA), plate discipline (K%, BB%, chase rate, whiff rate), batted ball profile (GB%, pull%, EV, LA), and sprint speed. Supports splits by handedness, home/away, and recency. |
+| `get_pitcher_stats` | Retrieves real pitching statistics from Statcast/FanGraphs: ERA/FIP/xFIP, K% and BB%, ground ball rate, pitch mix with per-pitch velocity/spin/whiff rates, and times-through-order wOBA splits. Supports splits by batter handedness, home/away, and recency. |
+| `get_matchup_data` | Retrieves real batter-vs-pitcher career history from MLB Stats API or Baseball Reference. Returns plate appearances, results, and outcome distribution. For small samples, supplements with similarity-model projections. |
 
 ### Game Situation Analysis
 
 | Tool | Description |
 |------|-------------|
-| `get_run_expectancy` | Returns the expected runs for a given base-out state, the probability of scoring at least one run, and the run distribution. Backed by the 24-state run expectancy matrix. |
-| `get_win_probability` | Returns the win probability, leverage index, and conditional win probabilities (if a run scores, if the inning ends scoreless) given the full game state: inning, half, outs, base state, score differential, and home/away. |
+| `get_run_expectancy` | Returns expected runs for a given base-out state, probability of scoring at least one run, and run distribution. Backed by a pre-computed 24-state run expectancy matrix derived from Retrosheet play-by-play data. |
+| `get_win_probability` | Returns win probability, leverage index, and conditional win probabilities (if a run scores, if the inning ends scoreless) given the full game state. Backed by pre-computed win probability tables derived from historical game outcomes. |
 | `evaluate_stolen_base` | Evaluates a stolen base attempt given runner speed, SB success rate, pitcher hold time, catcher pop time, target base, and current base-out state. Returns estimated success probability, breakeven rate, expected run-expectancy change, and a recommendation. |
 | `evaluate_sacrifice_bunt` | Evaluates whether a sacrifice bunt is optimal given the batter, base-out state, score differential, and inning. Compares bunt vs swing-away expected runs and probability of scoring at least one run. |
 
@@ -188,27 +196,43 @@ Each tool is a standalone Python or TypeScript script. The agent passes argument
 
 | Tool | Description |
 |------|-------------|
-| `get_bullpen_status` | Returns the current bullpen state for a team: which relievers are available, their stats, freshness level, days of rest, recent pitch counts, platoon splits, warm-up status, and which relievers are unavailable and why. |
-| `get_pitcher_fatigue_assessment` | Assesses the current pitcher's fatigue based on in-game trends: velocity changes from first inning to last, spin rate decline, batted ball quality trend (exit velocity against), pitch count, times through order, and an overall fatigue level rating. |
+| `get_bullpen_status` | Returns detailed bullpen status for the managed team: availability, stats, freshness, rest days, recent pitch counts, platoon splits, and warm-up status. Data sourced from the game state and supplemented with season stats from Statcast/FanGraphs. |
+| `get_pitcher_fatigue_assessment` | Assesses the current pitcher's fatigue based on in-game trends from the live game feed: velocity changes, spin rate decline, batted ball quality trend, pitch count, times through order, and an overall fatigue rating. |
 
 ### Defense
 
 | Tool | Description |
 |------|-------------|
-| `get_defensive_positioning` | Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Includes the batter's spray chart summary, infield-in cost/benefit analysis, and shift recommendations within current rule constraints. |
-| `get_defensive_replacement_value` | Evaluates the net value of a defensive substitution by comparing the defensive upgrade (OAA difference) against the offensive downgrade, scaled by estimated innings remaining. |
+| `get_defensive_positioning` | Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Uses the batter's real spray chart data from Statcast. |
+| `get_defensive_replacement_value` | Evaluates the net value of a defensive substitution by comparing the defensive upgrade (OAA difference) against the offensive downgrade, scaled by estimated innings remaining. Uses real defensive metrics from Statcast. |
 
 ### Platoon and Pinch-Hitting
 
 | Tool | Description |
 |------|-------------|
-| `get_platoon_comparison` | Compares a potential pinch hitter against the current batter for the active matchup. Returns each player's projected wOBA vs the current pitcher, the platoon advantage delta, the defensive cost of the substitution, and the bench depth impact. |
+| `get_platoon_comparison` | Compares a potential pinch hitter against the current batter for the active matchup. Returns each player's projected wOBA vs the current pitcher, the platoon advantage delta, the defensive cost, and the bench depth impact. |
+
+```
+tools/
+  get_batter_stats.py
+  get_pitcher_stats.py
+  get_matchup_data.py
+  get_run_expectancy.py
+  get_win_probability.py
+  evaluate_stolen_base.py
+  evaluate_sacrifice_bunt.py
+  get_bullpen_status.py
+  get_pitcher_fatigue_assessment.py
+  get_defensive_positioning.py
+  get_defensive_replacement_value.py
+  get_platoon_comparison.py
+```
 
 ---
 
-## 4. Analytical Framework Constants
+## 6. Analytical Framework Constants
 
-These values should be embedded in the agent's system prompt or available as a reference tool.
+These values are embedded in the agent's system prompt as reference knowledge for decision-making.
 
 ### Key Decision Formulas
 
@@ -251,7 +275,7 @@ P(event | batter, pitcher) = (P_batter * P_pitcher) / P_league
 
 ---
 
-## 5. MLB Rules the Agent Must Know
+## 7. MLB Rules the Agent Must Know
 
 These rules constrain available decisions and must be in the system prompt:
 
@@ -267,147 +291,115 @@ These rules constrain available decisions and must be in the system prompt:
 
 ---
 
-## 6. Agent Architecture (Claude Agent SDK)
+## 8. Agent Output
+
+The agent's primary output is a **plain-text decision** suitable for tweeting. The output should read like a baseball manager explaining their move to a broadcast audience.
+
+### When making an active decision:
+
+> Bottom of the 7th, bases loaded, 2 outs. Pulling Smith off the mound -- he's seeing the lineup for the 3rd time and his fastball is down 2.3 mph from the 1st inning. Bringing in Rivera from the pen. His .198 wOBA vs lefties is exactly what we need against Johnson.
+
+### When no action is needed:
+
+The agent responds with a brief "no action" indication. These are not tweeted.
+
+### Output characteristics:
+
+- Conversational but analytically grounded
+- References specific stats and matchup data to justify the decision
+- Describes the game situation for context
+- Names specific players involved
+- Fits within tweet length constraints (~280 characters for the core decision)
+- The reasoning can be longer for logging purposes, but the tweet-ready text must be concise
+
+---
+
+## 9. Agent Architecture (Claude Agent SDK)
 
 ### Technology Stack
 
-- **SDK**: `claude-agent-sdk` (Python)
-- **Tools**: Standalone Python/TypeScript scripts the agent can execute
-- **Agent pattern**: `ClaudeSDKClient` for multi-turn game management
-- **Output**: Structured output via Pydantic model for typed decisions
+- **SDK**: Claude Agent SDK (Python, `anthropic` package)
+- **Tools**: Standalone Python scripts querying real MLB data
+- **Entry point**: Single-file UV script with PEP 723 inline metadata
+- **Output**: Plain-text decision
 
 ### System Prompt Design
 
-The system prompt should establish:
-1. The agent's identity as a baseball manager
-2. The decision-making framework: always compute analytical context first (call `get_win_probability` and `get_run_expectancy` to assess the situation before deciding)
+The system prompt establishes:
+1. The agent's identity as the manager of a specific MLB team
+2. The decision-making framework: assess the situation via tools before deciding
 3. Key analytical constants (TTO penalty, platoon splits, breakeven rates)
 4. Current MLB rules that constrain decisions
-5. Instructions that the agent receives MatchupState, RosterState, and OpponentRosterState as input but must use tools for all statistical lookups and analytical computations
-6. That tools are for gathering information only -- the agent expresses its decision through the `ManagerDecision` structured output, not by calling an action tool
-7. The output format expected
-
-### Tool Organization
-
-Each tool is a standalone script in a `tools/` directory. The agent executes them and receives JSON output. Scripts can be written in Python or TypeScript.
-
-```
-tools/
-  get_batter_stats.py
-  get_pitcher_stats.py
-  get_matchup_data.py
-  get_run_expectancy.py
-  get_win_probability.py
-  evaluate_stolen_base.py
-  evaluate_sacrifice_bunt.py
-  get_bullpen_status.py
-  get_pitcher_fatigue_assessment.py
-  get_defensive_positioning.py
-  get_defensive_replacement_value.py
-  get_platoon_comparison.py
-```
-
-### Decision Output Schema
-
-Every agent response should conform to this structure:
-
-```python
-class ManagerDecision(BaseModel):
-    decision: str                          # e.g., "PULL_STARTER", "STOLEN_BASE", "SWING_AWAY"
-    action_details: str                    # Specific action: "Bring in Martinez (RHP) to face Johnson"
-    confidence: float                      # 0.0-1.0
-    reasoning: str                         # Full statistical justification
-    win_probability_before: float          # WP before decision
-    win_probability_after_expected: float  # Expected WP after decision
-    key_factors: list[str]                 # Top 3-5 factors that drove the decision
-    alternatives_considered: list[dict]    # [{decision, expected_wp, reason_rejected}]
-    risks: list[str]                       # Potential downsides
-```
-
-### Scenario Input Format
-
-Each scenario presented to the agent includes the three state objects and a decision prompt. No pre-computed analytical context is provided.
-
-```json
-{
-    "scenario_id": "uuid",
-    "matchup_state": { ... },
-    "roster_state": { ... },
-    "opponent_roster_state": { ... },
-    "decision_prompt": "Natural language description of the situation and what decision is needed"
-}
-```
+5. That the agent receives MatchupState, RosterState, and OpponentRosterState as input but must use tools for all statistical lookups
+6. That the output is plain-text describing the decision, not a structured object
+7. That most at-bats require no action -- the agent should only make active decisions when the situation warrants it
 
 ### Agent Flow
 
-1. Agent receives scenario with MatchupState, RosterState, OpponentRosterState, and a decision prompt
-2. Agent assesses the situation by calling analytical tools (`get_win_probability`, `get_run_expectancy`) to establish context
-3. Agent identifies the decision type and calls relevant data tools (player stats, matchup data, fatigue assessment, etc.)
-4. Agent synthesizes the tool results using the analytical framework from the system prompt
-5. Agent produces a structured `ManagerDecision` as its response -- this is how the agent communicates its decision, not via a tool call
-
-The simulation engine receives the `ManagerDecision` output, validates it against the current game state and MLB rules, applies it, and advances the game to the next decision point.
+1. Agent receives the current game state (MatchupState + RosterState + OpponentRosterState)
+2. Agent assesses the situation: Is this a decision point? Is the managed team batting or fielding? What's the leverage?
+3. If no action is warranted, agent responds with "no action"
+4. If a decision is warranted, agent calls relevant tools to gather context (player stats, matchup data, win probability, fatigue assessment, etc.)
+5. Agent synthesizes tool results and outputs a plain-text decision with reasoning
 
 ---
 
-## 7. Implementation Phases
+## 10. Data Sources
 
-### Phase 1: Core Framework
-- Game state model and scenario input format
-- System prompt with analytical framework
-- Structured output schema
-- 4 core tools: `get_batter_stats`, `get_pitcher_stats`, `get_run_expectancy`, `get_win_probability`
+### APIs and Libraries
 
-### Phase 2: Decision-Specific Tools
-- `evaluate_stolen_base`, `evaluate_sacrifice_bunt`
-- `get_matchup_data`, `get_platoon_comparison`
-- `get_bullpen_status`, `get_pitcher_fatigue_assessment`
-
-### Phase 3: Defensive and Advanced
-- `get_defensive_positioning`, `get_defensive_replacement_value`
-- In-game velocity/spin trend tracking
-- Multi-game bullpen optimization
-
-### Phase 4: Data Pipeline
-- Connect tools to real data sources (pybaseball, MLB Stats API)
-- Build pre-computed lookup tables (RE matrix, WP tables)
-- Historical scenario generation for testing
-
-### Phase 5: Evaluation
-- Generate test scenarios from historical games (Retrosheet play-by-play)
-- Compare agent decisions against actual manager decisions
-- Compare agent decisions against analytical consensus (The Book recommendations)
-- Measure decision quality by expected WPA of agent choices vs alternatives
-
----
-
-## 8. Data Sources
-
-The tool scripts need access to underlying data. These are the potential sources for populating them.
-
-### Libraries
-
-- **`pybaseball`** (Python) -- pulls Statcast, FanGraphs, and Baseball Reference data via simple API. The primary programmatic interface for historical and current-season stats.
-- **MLB Stats API** -- official MLB data feed for live game data, rosters, schedules, and game state. Free and public.
+- **MLB Stats API** (statsapi.mlb.com) -- live game feed, rosters, schedules, player info, batter-vs-pitcher history. Free and public. Primary source for game state and roster data.
+- **`pybaseball`** (Python) -- pulls Statcast, FanGraphs, and Baseball Reference data. Primary source for player statistics, pitch-level data, and advanced metrics.
 
 ### Databases and Websites
 
 - **Baseball Savant** (baseballsavant.mlb.com) -- Statcast data: pitch-level tracking (velocity, spin, movement, location), batted ball data (exit velocity, launch angle), player tracking (sprint speed, lead distance, jump), expected stats (xBA, xSLG, xwOBA), and catcher framing/pop times.
 - **FanGraphs** (fangraphs.com) -- advanced stats (wOBA, wRC+, FIP, xFIP, SIERA), plate discipline metrics, pitch values, defensive metrics (UZR, DRS), splits, leaderboards, and projections (Steamer, ZiPS).
 - **Baseball Reference** (baseball-reference.com) -- comprehensive traditional and advanced stats, career splits, batter-vs-pitcher tables, game logs, and historical data.
-- **Retrosheet** (retrosheet.org) -- play-by-play event files for every MLB game back to 1921. The standard source for computing run expectancy matrices, win probability tables, and transition probabilities.
-- **Brooks Baseball** (brooksbaseball.net) -- detailed pitch-by-pitch breakdowns, release point analysis, and historical pitch data trends.
+- **Retrosheet** (retrosheet.org) -- play-by-play event files for every MLB game back to 1921. Source for computing run expectancy matrices, win probability tables, and transition probabilities.
 
 ### Pre-Computed Tables
 
-Some tools will need pre-computed lookup tables rather than live data queries:
+Some tools use pre-computed lookup tables rather than live data queries:
 
-- **Run expectancy matrix** -- 24 base-out states, recomputed annually from Retrosheet data or pulled from published sources (FanGraphs, Tom Tango).
-- **Win probability tables** -- indexed by inning, half, outs, base state, and score differential. Computed from historical outcomes or available from FanGraphs.
+- **Run expectancy matrix** -- 24 base-out states, computed from Retrosheet data or published sources (FanGraphs, Tom Tango).
+- **Win probability tables** -- indexed by inning, half, outs, base state, and score differential. Computed from historical outcomes.
 - **Leverage index tables** -- derived from win probability tables, measuring the expected swing in WP for each game state.
 - **Stolen base breakeven rates** -- derived from run expectancy matrix, one value per base-out state.
 
 ### Reference Texts
 
-- **"The Book: Playing the Percentages in Baseball"** by Tom Tango, Mitchel Lichtman, and Andrew Dolphin -- the definitive analytical reference for managerial decision-making. Covers run expectancy, win probability, platoon splits, sacrifice bunts, stolen bases, intentional walks, pitching changes, and more.
-- **Tom Tango's website** (tangotiger.com) -- foundational framework for LI, WPA, and run expectancy analysis, with published tables and tools.
+- **"The Book: Playing the Percentages in Baseball"** by Tom Tango, Mitchel Lichtman, and Andrew Dolphin -- the definitive analytical reference for managerial decision-making.
+- **Tom Tango's website** (tangotiger.com) -- foundational framework for LI, WPA, and run expectancy analysis.
+
+---
+
+## 11. Implementation Phases
+
+### Phase 1: Data Foundation
+- MLB Stats API client for rosters and player lookups
+- pybaseball/Statcast integration for player stats
+- Pre-computed run expectancy and win probability tables from Retrosheet
+- Data caching layer
+
+### Phase 2: Tools (backed by real data)
+- Implement all 12 information-gathering tools using real data sources
+- Input validation on all tool parameters
+- Consistent JSON response format across tools
+
+### Phase 3: Agent Core
+- Game state ingestion (parse pushed game state into MatchupState/RosterState/OpponentRosterState)
+- Agent system prompt
+- Decision engine (receive state, use tools, output decision)
+- Plain-text output formatting
+
+### Phase 4: Integration
+- External service that polls MLB Stats API live game feed
+- Decision logging with full context
+- Tweet output integration
+- Error handling for API failures, invalid data, rate limits
+
+### Phase 5: Evaluation
+- Test against historical game situations
+- Compare agent decisions against actual manager decisions
+- Measure decision quality by expected WPA

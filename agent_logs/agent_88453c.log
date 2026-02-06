@@ -1,0 +1,17 @@
+The `get_matchup_data` feature is complete. Here's a summary of what was done:
+
+**Feature implemented:** `get_matchup_data`
+
+**Implementation (`tools/get_matchup_data.py`):**
+- Loads player data from roster JSON (same pattern as `get_batter_stats`/`get_pitcher_stats`)
+- Uses deterministic hashing of batter-pitcher ID pairs to simulate career plate appearances (0-45 PA), making results reproducible
+- Derives matchup stats by blending batter attributes with pitcher attributes, accounting for platoon matchups (L/R handedness, switch hitters)
+- Classifies sample size reliability: none (0 PA), small (<10), medium (10-29), large (30+)
+- Computes similarity-model projected wOBA based on batter quality vs pitcher quality (always available, most useful with small/no samples)
+- Builds pitch-type vulnerability breakdown (FF, SL, CH, and CU for high-stuff pitchers) with usage rates and wOBA_against
+- Returns a meaningful "no history" response with null matchup_stats/outcome_distribution and a descriptive message when PA = 0
+- Full validation: invalid player IDs, non-batters, non-pitchers all return structured error responses
+
+**Tests (`tests/test_get_matchup_data.py`):** 25 tests covering all 9 feature steps plus edge cases -- all passing.
+
+**Verification:** All existing tests (18 batter + 23 pitcher) still pass, dry-run validates successfully.

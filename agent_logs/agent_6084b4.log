@@ -1,0 +1,18 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_pitcher_stats`** -- now marked as `passing` in features.json.
+
+**Implementation (`tools/get_pitcher_stats.py`):**
+- Loads roster data from `data/sample_rosters.json` and builds a player lookup (same pattern as `get_batter_stats`)
+- Derives all pitching stats from player attributes (`stuff`, `control`, `stamina`, `velocity`, `era_vs_l`, `era_vs_r`):
+  - **Traditional**: ERA (from split data), FIP (stuff + control driven), xFIP (regressed FIP), SIERA (blend)
+  - **Rates**: K% (stuff-driven), BB% (control-driven)
+  - **Batted ball**: GB%, FB%, LD% (summing to ~1.0)
+  - **Pitch mix**: 3-4 pitches per pitcher (FF always, SL, CH, CU for stuff >= 60), each with usage, velocity, spin rate, whiff rate -- all scaled from the pitcher's base velocity and stuff rating
+  - **Times-through-order**: 1st/2nd/3rd+ wOBA splits with degradation scaled by stamina
+  - **Today's line**: In-game IP/H/R/ER/BB/K tracking via module-level state
+- Full input validation: player existence, parameter enum values, pitcher attribute check
+- Supports splits: `vs_hand` (L/R), `home_away`, `recency_window`
+
+**Tests (`tests/test_get_pitcher_stats.py`):** 23 tests covering all 8 feature steps plus additional validation:
+- All split types, invalid parameters, position-player-as-pitcher error, cross-team access, pitch velocity ordering, stuff/control/stamina attribute effects, curveball inclusion logic, response structure completeness

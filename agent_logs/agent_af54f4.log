@@ -1,0 +1,26 @@
+Done. Here's a summary of what was implemented:
+
+**Feature: `get_run_expectancy`** -- now marked as `"passing"` in features.json.
+
+**Changes made:**
+
+1. **`tools/get_run_expectancy.py`** -- Replaced the stub's heuristic approximations with:
+   - `PROB_AT_LEAST_ONE` -- empirically-grounded probability of scoring at least one run for all 24 base-out states
+   - `RUN_DISTRIBUTION` -- full run distribution tables (P(0), P(1), P(2), P(3+)) for all 24 states, with distributions that sum to 1.0 and are consistent with the scoring probabilities
+   - `_compute_transitions()` -- comprehensive transition calculations covering:
+     - Steal of 2nd base (success, caught, breakeven rate)
+     - Steal of 3rd base (success, caught, breakeven rate)
+     - Sacrifice bunt (runner on 1st, runner on 2nd, runners on 1st & 2nd)
+     - Ground into double play
+     - Wild pitch / passed ball scoring from 3rd
+   - Proper error handling with `INVALID_PARAMETER` error codes
+
+2. **`tests/test_get_run_expectancy.py`** -- 41 comprehensive tests covering all 6 feature steps:
+   - Step 1: Validates all 24 base-out states and rejects invalid outs
+   - Step 2: Verifies expected runs match the RE matrix, monotonicity properties
+   - Step 3: Validates scoring probabilities (range, monotonicity, edge cases)
+   - Step 4: Validates run distributions (sum to 1.0, consistency with scoring probs, non-negative)
+   - Step 5: Validates all transition types with contextual correctness
+   - Step 6: Verifies data table completeness
+
+3. **`features.json`** -- Updated `get_run_expectancy` status to `"passing"`

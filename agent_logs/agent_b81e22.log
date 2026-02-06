@@ -1,0 +1,18 @@
+Done. Here's a summary of what was accomplished:
+
+**Feature implemented:** `get_batter_stats`
+
+**What changed:**
+- `tools/get_batter_stats.py` -- Replaced the hardcoded stub with a full implementation that:
+  - Loads player data from `data/sample_rosters.json` at first call
+  - Derives realistic batting statistics from player attributes (contact, power, speed, eye, avg_vs_l/r)
+  - Supports all three split types: `vs_hand` (L/R), `home_away`, and `recency_window`
+  - Returns all required stat categories: traditional (AVG/OBP/SLG/OPS), advanced (wOBA/wRC+/barrel rate/xwOBA), plate discipline (K%/BB%/chase rate/whiff rate), batted ball (GB%/pull%/exit velocity/launch angle), sprint speed, situational (RISP/high leverage/late & close), and today's line
+  - Returns proper error responses for invalid player IDs, invalid parameters, and non-batters
+  - Exposes `set_today_line()` and `reset_today_lines()` for the simulation engine to track in-game performance
+
+- `tests/test_get_batter_stats.py` -- 18 tests covering all 9 feature requirements plus edge cases (splits, parameter validation, player attribute differentiation, bench/away players)
+
+- `features.json` -- Marked `get_batter_stats` as `"status": "passing"`
+
+**Commit:** `6084b42` pushed to `main`
