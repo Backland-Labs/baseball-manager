@@ -52,6 +52,7 @@
   {
     "category": "tool",
     "name": "get_matchup_data",
+    "status": "passing",
     "description": "Retrieves head-to-head batter vs pitcher history and similarity-based projections. Returns direct matchup results, sample-size reliability, similarity-model projected wOBA, and pitch-type vulnerability breakdown.",
     "steps": [
       "Accepts a batter identifier and a pitcher identifier",
