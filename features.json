@@ -138,7 +138,7 @@
   {
     "category": "tool",
     "name": "get_pitcher_stats",
-    "passing": false,
+    "passing": true,
     "description": "Retrieves real pitching statistics from Statcast/FanGraphs for a pitcher. Returns ERA/FIP/xFIP, strikeout and walk rates, ground ball rate, pitch mix with per-pitch metrics, and times-through-order splits.",
     "steps": [
       "Accepts a player identifier and optional split parameters (vs_hand: L/R, home_away, recency_window)",
