@@ -69,6 +69,7 @@
   {
     "category": "tool",
     "name": "get_run_expectancy",
+    "status": "passing",
     "description": "Returns expected runs for a given base-out state, probability of scoring at least one run, and the run distribution. Backed by the 24-state run expectancy matrix.",
     "steps": [
       "Accepts base state (runners on 1st, 2nd, 3rd in any combination) and out count (0, 1, 2)",
