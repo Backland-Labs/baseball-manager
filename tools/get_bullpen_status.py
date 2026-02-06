@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Returns detailed status of all bullpen pitchers.
 
 Loads bullpen data from sample_rosters.json and derives platoon splits,

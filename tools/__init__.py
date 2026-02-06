@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Baseball manager agent tools -- information-gathering tools for the Claude agent."""
 
 from tools.get_batter_stats import get_batter_stats

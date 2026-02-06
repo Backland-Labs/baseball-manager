@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Returns expected runs for a given base-out state.
 
 Backed by the pre-computed 24-state run expectancy matrix with empirically-

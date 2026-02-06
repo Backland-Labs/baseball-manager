@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Evaluates whether a sacrifice bunt is optimal.
 
 Uses batter attributes (contact, speed, power), the run expectancy matrix,

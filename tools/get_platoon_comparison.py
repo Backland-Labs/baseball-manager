@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Compares a potential pinch hitter against the current batter.
 
 Loads player data from sample_rosters.json and derives projected wOBA for each

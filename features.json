@@ -32,7 +32,7 @@
   {
     "category": "architecture",
     "name": "single_file_uv_scripts",
-    "passing": false,
+    "passing": true,
     "description": "All Python scripts are single-file UV executables. Each script includes an inline PEP 723 metadata block declaring its dependencies so it can be run directly with 'uv run script.py' without a separate requirements file or virtual environment.",
     "steps": [
       "Each .py file begins with a PEP 723 inline metadata block (/// script) declaring its dependencies",

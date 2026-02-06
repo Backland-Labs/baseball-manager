@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Retrieves head-to-head batter vs pitcher history and projections."""
 
 import json

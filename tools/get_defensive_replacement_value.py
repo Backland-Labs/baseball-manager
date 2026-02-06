@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Evaluates the net value of a defensive substitution.
 
 Loads fielder and batter data from sample_rosters.json and derives the

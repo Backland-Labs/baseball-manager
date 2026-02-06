@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Returns recommended defensive positioning for a given matchup and situation.
 
 Loads batter and pitcher data from sample_rosters.json and derives spray chart

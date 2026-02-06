@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Evaluates a potential stolen base attempt.
 
 Uses runner speed attributes, pitcher hold time (derived from pitcher

@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Returns win probability, leverage index, and conditional win probabilities.
 
 Backed by pre-computed win probability tables derived from historical MLB data

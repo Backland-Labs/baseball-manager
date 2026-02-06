@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["anthropic>=0.78.0"]
+# ///
 """Assesses the current pitcher's fatigue based on in-game trends.
 
 Loads pitcher data from sample_rosters.json and derives fatigue indicators
