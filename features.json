@@ -361,6 +361,7 @@
   {
     "category": "functional",
     "name": "error_handling",
+    "status": "passing",
     "description": "When the agent makes an invalid tool call or returns an invalid decision, the system returns a clear error message and allows the agent to try again without advancing the game state.",
     "steps": [
       "Invalid tool calls return a descriptive error message explaining why the call was rejected",

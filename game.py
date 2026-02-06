@@ -107,36 +107,153 @@ routine situations -- save your analysis for high-leverage moments.
 
 
 # ---------------------------------------------------------------------------
+# Validation-only check (no game state mutation)
+# ---------------------------------------------------------------------------
+
+def _peek_validate(game_state: GameState, decision: dict,
+                   managed_team: str) -> DecisionResult:
+    """Check if a decision would be valid WITHOUT applying it to game state.
+
+    This performs the same validation checks as validate_and_apply_decision
+    but never modifies the game state. Used by the retry loop to decide
+    whether to re-prompt the agent before the actual apply step.
+
+    Returns:
+        DecisionResult with valid/error fields set. The events list is always
+        empty since nothing is applied.
+    """
+    is_home = managed_team == "home"
+    our_team = game_state.home if is_home else game_state.away
+    bt = game_state.batting_team()
+    ft = game_state.fielding_team()
+    we_are_batting = (bt == our_team)
+
+    decision_type = decision.get("decision", "").upper().strip()
+
+    # No-action decisions are always valid
+    no_action_types = {
+        "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
+        "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    }
+    if decision_type in no_action_types or not decision_type:
+        return DecisionResult(valid=True)
+
+    # PITCHING_CHANGE / PULL_STARTER
+    if decision_type in ("PITCHING_CHANGE", "PULL_STARTER", "BRING_IN_RELIEVER"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot make pitching change while batting")
+        if ft.current_pitcher_batters_faced_this_stint < 3 and game_state.outs < 3:
+            return DecisionResult(
+                valid=False,
+                error=f"3-batter minimum not met ({ft.current_pitcher_batters_faced_this_stint} faced). "
+                      f"Pitcher must face at least 3 batters before being removed."
+            )
+        from simulation import _extract_player_id
+        new_pitcher_id = _extract_player_id(decision.get("action_details", ""), our_team)
+        if not new_pitcher_id:
+            available = [p for p in our_team.bullpen if p.player_id not in our_team.used_pitchers]
+            if not available:
+                return DecisionResult(valid=False, error="No available relievers in bullpen")
+        else:
+            new_pitcher = our_team.get_player_by_id(new_pitcher_id)
+            if not new_pitcher:
+                return DecisionResult(valid=False, error=f"Player {new_pitcher_id} not found on roster")
+            if new_pitcher_id in our_team.used_pitchers:
+                return DecisionResult(valid=False, error=f"Pitcher {new_pitcher.name} has already been used")
+        return DecisionResult(valid=True)
+
+    # PINCH_HIT
+    if decision_type in ("PINCH_HIT", "PINCH_HITTER"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot pinch hit while fielding")
+        from simulation import _extract_player_id, _extract_player_id_from_bench
+        pinch_hitter_id = _extract_player_id_from_bench(decision.get("action_details", ""), our_team)
+        if not pinch_hitter_id:
+            pinch_hitter_id = _extract_player_id(decision.get("action_details", ""), our_team)
+        if not pinch_hitter_id:
+            return DecisionResult(valid=False, error="Could not identify pinch hitter from action details")
+        pinch_hitter = our_team.get_player_by_id(pinch_hitter_id)
+        if not pinch_hitter:
+            return DecisionResult(valid=False, error=f"Player {pinch_hitter_id} not found on roster")
+        if pinch_hitter_id in our_team.removed_players:
+            return DecisionResult(valid=False, error=f"{pinch_hitter.name} has already been removed from game")
+        return DecisionResult(valid=True)
+
+    # STOLEN_BASE
+    if decision_type in ("STOLEN_BASE", "STEAL"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot attempt steal while fielding")
+        r1 = game_state.runner_on(1)
+        r2 = game_state.runner_on(2)
+        runner = None
+        if r1 and not game_state.runner_on(2):
+            runner = r1
+        elif r2 and not game_state.runner_on(3):
+            runner = r2
+        elif r1:
+            runner = r1
+        if not runner:
+            return DecisionResult(valid=False, error="No eligible runner for stolen base attempt")
+        return DecisionResult(valid=True)
+
+    # INTENTIONAL_WALK
+    if decision_type in ("INTENTIONAL_WALK", "IBB"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot issue intentional walk while batting")
+        return DecisionResult(valid=True)
+
+    # DEFENSIVE_POSITIONING
+    if decision_type in ("DEFENSIVE_POSITIONING", "SHIFT", "INFIELD_IN", "POSITION_CHANGE"):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot change defensive positioning while batting")
+        return DecisionResult(valid=True)
+
+    # MOUND_VISIT
+    if decision_type in ("MOUND_VISIT",):
+        if we_are_batting:
+            return DecisionResult(valid=False, error="Cannot make mound visit while batting")
+        if our_team.mound_visits_remaining <= 0:
+            return DecisionResult(valid=False, error="No mound visits remaining")
+        return DecisionResult(valid=True)
+
+    # SACRIFICE_BUNT / BUNT
+    if decision_type in ("SACRIFICE_BUNT", "BUNT", "SQUEEZE"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot bunt while fielding")
+        return DecisionResult(valid=True)
+
+    # PINCH_RUN
+    if decision_type in ("PINCH_RUN", "PINCH_RUNNER"):
+        if not we_are_batting:
+            return DecisionResult(valid=False, error="Cannot pinch run while fielding")
+        return DecisionResult(valid=True)
+
+    # REPLAY_CHALLENGE
+    if decision_type in ("REPLAY_CHALLENGE", "CHALLENGE"):
+        if not our_team.challenge_available:
+            return DecisionResult(valid=False, error="No challenge available")
+        return DecisionResult(valid=True)
+
+    # Unknown decision types are treated as no-action (valid)
+    return DecisionResult(valid=True)
+
+
+# ---------------------------------------------------------------------------
 # Agent decision loop
 # ---------------------------------------------------------------------------
 
-def run_agent_decision(client: Anthropic, game_state: GameState,
-                       managed_team: str, messages: list[dict],
-                       verbose: bool = True) -> tuple[dict, list[dict]]:
-    """Present the current game state to the agent and get a ManagerDecision.
+def _call_agent(client: Anthropic, messages: list[dict],
+                verbose: bool = True) -> tuple[dict, object | None]:
+    """Send messages to the Claude agent and extract a ManagerDecision.
 
     Args:
         client: Anthropic API client.
-        game_state: Current authoritative game state.
-        managed_team: "home" or "away".
-        messages: Conversation history (mutated in place with new messages).
+        messages: Full conversation history including the latest user message.
         verbose: Print agent activity.
 
     Returns:
-        Tuple of (decision_dict, updated_messages).
+        Tuple of (decision_dict, final_message).
     """
-    scenario = game_state_to_scenario(game_state, managed_team)
-
-    user_message = (
-        "Here is the current game scenario:\n\n"
-        f"**Matchup State:**\n```json\n{json.dumps(scenario['matchup_state'], indent=2)}\n```\n\n"
-        f"**Roster State:**\n```json\n{json.dumps(scenario['roster_state'], indent=2)}\n```\n\n"
-        f"**Opponent Roster State:**\n```json\n{json.dumps(scenario['opponent_roster_state'], indent=2)}\n```\n\n"
-        f"**Decision Needed:** {scenario['decision_prompt']}"
-    )
-
-    messages.append({"role": "user", "content": user_message})
-
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
         runner = client.beta.messages.tool_runner(
@@ -173,7 +290,7 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
         if verbose:
             print(f"    [Decision] {decision.decision}: {decision.action_details}")
     else:
-        # Fallback: try to parse from text
+        # Fallback: no structured output
         if verbose:
             print("    [Decision] No structured output received, defaulting to NO_ACTION")
         decision_dict = {
@@ -185,9 +302,106 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
             "risks": [],
         }
 
+    return decision_dict, final_message
+
+
+def run_agent_decision(client: Anthropic, game_state: GameState,
+                       managed_team: str, messages: list[dict],
+                       verbose: bool = True,
+                       max_retries: int = 5) -> tuple[dict, list[dict]]:
+    """Present the current game state to the agent and get a ManagerDecision.
+
+    If the agent's decision is invalid, it is re-prompted with the error
+    message so it can correct its decision. After ``max_retries`` consecutive
+    invalid decisions, a forced NO_ACTION is returned.
+
+    Args:
+        client: Anthropic API client.
+        game_state: Current authoritative game state.
+        managed_team: "home" or "away".
+        messages: Conversation history (mutated in place with new messages).
+        verbose: Print agent activity.
+        max_retries: Maximum number of retry attempts for invalid decisions.
+
+    Returns:
+        Tuple of (decision_dict, updated_messages).
+    """
+    from simulation import validate_and_apply_decision as _validate
+
+    scenario = game_state_to_scenario(game_state, managed_team)
+
+    user_message = (
+        "Here is the current game scenario:\n\n"
+        f"**Matchup State:**\n```json\n{json.dumps(scenario['matchup_state'], indent=2)}\n```\n\n"
+        f"**Roster State:**\n```json\n{json.dumps(scenario['roster_state'], indent=2)}\n```\n\n"
+        f"**Opponent Roster State:**\n```json\n{json.dumps(scenario['opponent_roster_state'], indent=2)}\n```\n\n"
+        f"**Decision Needed:** {scenario['decision_prompt']}"
+    )
+
+    messages.append({"role": "user", "content": user_message})
+
+    # First attempt
+    decision_dict, final_message = _call_agent(client, messages, verbose=verbose)
+
     # Add assistant response to messages for context continuity
     if final_message:
         messages.append({"role": "assistant", "content": final_message.content})
+
+    # Validate (dry -- we only check, we do NOT apply yet)
+    # We use a temporary engine reference just for dry-validation.
+    # The actual apply happens in run_agent_game after we return.
+    # For validation-only, we need to peek without mutating game state.
+    # We'll do a pre-check here using the same validate function but on a
+    # *snapshot*; however, to keep things simple and avoid deep copies,
+    # we use _peek_validate which checks validity without side effects.
+    result = _peek_validate(game_state, decision_dict, managed_team)
+
+    retries = 0
+    while not result.valid and retries < max_retries:
+        retries += 1
+        if verbose:
+            print(f"    [Invalid] {result.error} (retry {retries}/{max_retries})")
+
+        # Send the error back to the agent so it can correct its decision
+        error_msg = (
+            f"Your previous decision was INVALID: {result.error}\n\n"
+            f"Please reconsider and provide a valid ManagerDecision. "
+            f"Remember: if no strategic move is needed, use NO_ACTION."
+        )
+        messages.append({"role": "user", "content": error_msg})
+
+        try:
+            decision_dict, final_message = _call_agent(client, messages, verbose=verbose)
+        except Exception as e:
+            if verbose:
+                print(f"    [Error] Agent retry call failed: {e}")
+            decision_dict = {
+                "decision": "NO_ACTION",
+                "action_details": f"Agent retry error: {e}",
+                "confidence": 0.0,
+                "reasoning": "Agent call failed on retry",
+                "key_factors": [],
+                "risks": [],
+            }
+            final_message = None
+
+        if final_message:
+            messages.append({"role": "assistant", "content": final_message.content})
+
+        result = _peek_validate(game_state, decision_dict, managed_team)
+
+    # If still invalid after all retries, force NO_ACTION
+    if not result.valid:
+        if verbose:
+            print(f"    [Forced] {max_retries} consecutive invalid decisions, forcing NO_ACTION")
+        decision_dict = {
+            "decision": "NO_ACTION",
+            "action_details": "Forced no-action after repeated invalid decisions",
+            "confidence": 0.0,
+            "reasoning": f"Agent failed to produce a valid decision after {max_retries} retries. Last error: {result.error}",
+            "key_factors": [],
+            "risks": [],
+        }
 
     return decision_dict, messages
 
@@ -197,15 +411,18 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                    max_consecutive_failures: int = 5) -> GameState:
     """Run a full game with the Claude agent managing one team.
 
-    The agent is consulted at each decision point. The opposing team uses
-    automated management.
+    The agent is consulted at each decision point. If its decision is invalid,
+    run_agent_decision re-prompts the agent with the error message, giving it
+    up to ``max_consecutive_failures`` retries before forcing NO_ACTION. The
+    opposing team uses automated management.
 
     Args:
         seed: Random seed for deterministic replay.
         managed_team: "home" or "away".
         verbose: Print play-by-play and agent activity.
         max_innings: Safety limit for extra innings.
-        max_consecutive_failures: Force no-action after this many invalid decisions.
+        max_consecutive_failures: Max invalid-decision retries per decision
+            point (forwarded to run_agent_decision).
 
     Returns:
         Final GameState.
@@ -217,8 +434,8 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
     game = engine.initialize_game(rosters)
     messages: list[dict] = []
     decision_log: list[dict] = []
+    error_log: list[dict] = []  # Errors logged separately from play-by-play
     total_agent_calls = 0
-    consecutive_failures = 0
 
     if verbose:
         print("=" * 72)
@@ -261,7 +478,7 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
                 # Keep system context fresh -- only retain last few exchanges
                 messages = messages[-10:]
 
-            # Get agent decision
+            # Get agent decision (with built-in retry on invalid decisions)
             total_agent_calls += 1
 
             if verbose:
@@ -272,11 +489,20 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
 
             try:
                 decision_dict, messages = run_agent_decision(
-                    client, game, managed_team, messages, verbose=verbose
+                    client, game, managed_team, messages,
+                    verbose=verbose, max_retries=max_consecutive_failures,
                 )
             except Exception as e:
                 if verbose:
                     print(f"    [Error] Agent call failed: {e}")
+                error_log.append({
+                    "turn": total_agent_calls,
+                    "inning": game.inning,
+                    "half": game.half,
+                    "error_type": "agent_call_failure",
+                    "error": str(e),
+                    "timestamp": time.time(),
+                })
                 decision_dict = {
                     "decision": "NO_ACTION",
                     "action_details": f"Agent error: {e}",
@@ -300,23 +526,25 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
             }
             decision_log.append(decision_entry)
 
-            # Validate and apply the decision
+            # Apply the decision (should be valid after retry loop, but
+            # handle any edge cases defensively)
             result = validate_and_apply_decision(game, decision_dict, managed_team, engine)
 
             if not result.valid:
-                consecutive_failures += 1
+                # This should be rare since run_agent_decision pre-validates.
+                # Log the error (not in play-by-play) and proceed as no-action.
+                error_log.append({
+                    "turn": total_agent_calls,
+                    "inning": game.inning,
+                    "half": game.half,
+                    "error_type": "invalid_decision_at_apply",
+                    "decision": decision_dict.get("decision", ""),
+                    "error": result.error,
+                    "timestamp": time.time(),
+                })
                 if verbose:
                     print(f"    [Invalid] {result.error}")
-
-                if consecutive_failures >= max_consecutive_failures:
-                    if verbose:
-                        print(f"    [Forced] Too many invalid decisions, forcing no-action")
-                    consecutive_failures = 0
-                else:
-                    # Don't re-prompt in this implementation -- just proceed with no action
-                    pass
             else:
-                consecutive_failures = 0
                 if result.description and verbose:
                     for event in result.events:
                         if event.event_type == "decision":
@@ -378,13 +606,19 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
             print(decisions_summary)
         print(f"\nAgent decisions: {total_agent_calls}")
         print(f"Decision log entries: {len(decision_log)}")
+        if error_log:
+            print(f"Error log entries: {len(error_log)}")
 
-    # Save decision log
+    # Save decision log and error log
     log_path = Path(__file__).parent / "data" / f"decision_log_{engine.seed}.json"
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_data = {
+            "decisions": decision_log,
+            "errors": error_log,
+        }
         with open(log_path, "w") as f:
-            json.dump(decision_log, f, indent=2, default=str)
+            json.dump(log_data, f, indent=2, default=str)
         if verbose:
             print(f"Decision log saved to: {log_path}")
     except Exception:
