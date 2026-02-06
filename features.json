@@ -431,7 +431,7 @@
   {
     "category": "technical",
     "name": "input_validation_layer",
-    "passing": false,
+    "passing": true,
     "description": "All tool inputs are validated against their schemas before execution. Game state inputs are validated before reaching the agent. This ensures clear error messages for invalid data.",
     "steps": [
       "Each tool has a Pydantic input model with required and optional parameters",
