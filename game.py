@@ -357,11 +357,24 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
     messages.append({"role": "user", "content": user_message})
 
     # First attempt
-    decision_dict, final_message, call_meta = _call_agent(client, messages, verbose=verbose)
-    all_tool_calls.extend(call_meta["tool_calls"])
-    total_input_tokens += call_meta["token_usage"]["input_tokens"]
-    total_output_tokens += call_meta["token_usage"]["output_tokens"]
-    total_agent_turns += call_meta["agent_turns"]
+    try:
+        decision_dict, final_message, call_meta = _call_agent(client, messages, verbose=verbose)
+        all_tool_calls.extend(call_meta["tool_calls"])
+        total_input_tokens += call_meta["token_usage"]["input_tokens"]
+        total_output_tokens += call_meta["token_usage"]["output_tokens"]
+        total_agent_turns += call_meta["agent_turns"]
+    except Exception as e:
+        if verbose:
+            print(f"    [Error] Agent call failed: {e}")
+        decision_dict = {
+            "decision": "NO_ACTION",
+            "action_details": f"Agent error: {e}",
+            "confidence": 0.0,
+            "reasoning": "Agent call failed",
+            "key_factors": [],
+            "risks": [],
+        }
+        final_message = None
 
     # Add assistant response to messages for context continuity
     if final_message:

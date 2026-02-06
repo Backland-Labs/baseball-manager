@@ -342,7 +342,7 @@
   {
     "category": "functional",
     "name": "agent_decision_engine",
-    "passing": false,
+    "passing": true,
     "description": "The core decision function. Receives a parsed game state, sends it to the Claude agent with the system prompt and tools, and returns the agent's plain-text decision. This is a single-shot invocation per at-bat, not a persistent game loop.",
     "steps": [
       "Accept MatchupState, RosterState, and OpponentRosterState as input",
