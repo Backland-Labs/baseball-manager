@@ -45,7 +45,7 @@
   {
     "category": "data",
     "name": "mlb_stats_api_client",
-    "passing": false,
+    "passing": true,
     "description": "Core client for the MLB Stats API (statsapi.mlb.com). Provides functions to fetch rosters, player metadata, and live game state. This is the foundation that the external service and tools build on.",
     "steps": [
       "Implement a data/mlb_api.py module with functions for common MLB Stats API endpoints",
