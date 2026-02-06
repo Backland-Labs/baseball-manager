@@ -261,7 +261,7 @@
   {
     "category": "tool",
     "name": "get_defensive_positioning",
-    "passing": false,
+    "passing": true,
     "description": "Returns recommended infield and outfield positioning for a given batter-pitcher matchup and game situation. Uses the batter's real spray chart data from Statcast.",
     "steps": [
       "Accepts batter identifier, pitcher identifier, and current game situation (outs, runners, score, inning)",
