@@ -245,7 +245,7 @@
   {
     "category": "tool",
     "name": "get_pitcher_fatigue_assessment",
-    "passing": false,
+    "passing": true,
     "description": "Assesses the current pitcher's fatigue based on in-game trends from the live game feed: velocity changes, spin rate decline, batted ball quality trend, pitch count, times through order, and an overall fatigue rating.",
     "steps": [
       "Accepts a pitcher identifier (defaults to current pitcher if omitted)",
