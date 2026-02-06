@@ -401,7 +401,7 @@
   {
     "category": "functional",
     "name": "live_game_feed_service",
-    "passing": false,
+    "passing": true,
     "description": "The external service that polls the MLB Stats API live game feed, detects new at-bats, and invokes the agent. This is the orchestrator that drives the agent during a live game.",
     "steps": [
       "Accept a gamePk (MLB game ID) and the team the agent manages",
