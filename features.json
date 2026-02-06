@@ -107,7 +107,7 @@
   {
     "category": "data",
     "name": "data_caching",
-    "passing": false,
+    "passing": true,
     "description": "Caching layer for API responses to avoid redundant network calls during a game. Player stats, matchup data, and roster info are cached locally with configurable expiry.",
     "steps": [
       "Implement a data/cache.py module with get/set/invalidate functions",
