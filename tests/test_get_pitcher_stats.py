@@ -26,7 +26,11 @@ from tools.get_pitcher_stats import get_pitcher_stats, set_today_line, reset_tod
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    """Parse JSON response. For success responses, merge data into top level for easy access."""
+    d = json.loads(result)
+    if d.get("status") == "ok" and "data" in d:
+        return {"status": "ok", "tool": d.get("tool"), **d["data"]}
+    return d
 
 
 def test_step1_accepts_player_id_and_splits():

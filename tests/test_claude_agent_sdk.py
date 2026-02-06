@@ -458,9 +458,13 @@ class TestStep6MultiplToolsPerTurn:
         assert re_result["status"] == "ok"
 
         # Results are different -- each tool returns distinct data structures
-        assert "traditional" in batter_result  # Batting stats
-        assert "pitch_mix" in pitcher_result or "stats" in pitcher_result  # Pitching stats
-        assert "batter_id" in matchup_result or "matchup" in matchup_result  # Matchup data
+        # With structured responses, data is nested under "data" key
+        batter_data = batter_result.get("data", batter_result)
+        pitcher_data = pitcher_result.get("data", pitcher_result)
+        matchup_data = matchup_result.get("data", matchup_result)
+        assert "traditional" in batter_data  # Batting stats
+        assert "pitch_mix" in pitcher_data or "stats" in pitcher_data  # Pitching stats
+        assert "batter_id" in matchup_data or "matchup" in matchup_data  # Matchup data
 
 
 # ===========================================================================

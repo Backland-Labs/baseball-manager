@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref, unavailable
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
 # ---------------------------------------------------------------------------
@@ -243,40 +245,30 @@ def get_matchup_data(batter_id: str, pitcher_id: str) -> str:
     """
     _load_players()
 
+    TOOL_NAME = "get_matchup_data"
+
     # Validate batter_id
     if batter_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Batter '{batter_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Batter '{batter_id}' not found in any roster.")
 
     # Validate pitcher_id
     if pitcher_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Pitcher '{pitcher_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Pitcher '{pitcher_id}' not found in any roster.")
 
     batter_player = _PLAYERS[batter_id]
     pitcher_player = _PLAYERS[pitcher_id]
 
     # Verify the batter has batting attributes
     if "batter" not in batter_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_BATTER",
-            "message": f"Player '{batter_id}' ({batter_player.get('name', 'unknown')}) does not have batting attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_BATTER",
+                              f"Player '{batter_id}' ({batter_player.get('name', 'unknown')}) does not have batting attributes.")
 
     # Verify the pitcher has pitching attributes
     if "pitcher" not in pitcher_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_PITCHER",
-            "message": f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitching attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_PITCHER",
+                              f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitching attributes.")
 
     batter_attrs = batter_player["batter"]
     pitcher_attrs = pitcher_player["pitcher"]
@@ -293,9 +285,8 @@ def get_matchup_data(batter_id: str, pitcher_id: str) -> str:
     # Build pitch-type vulnerability
     pitch_vuln = _build_pitch_vulnerability(batter_attrs, pitcher_attrs, pitcher_player)
 
-    # Build the response
-    result: dict = {
-        "status": "ok",
+    # Build the data payload
+    data: dict = {
         "batter_id": batter_id,
         "batter_name": batter_player.get("name", "Unknown"),
         "pitcher_id": pitcher_id,
@@ -305,29 +296,27 @@ def get_matchup_data(batter_id: str, pitcher_id: str) -> str:
     }
 
     if pa > 0:
-        result["matchup_stats"] = {
+        data["matchup_stats"] = {
             "AVG": stats["matchup_avg"],
             "SLG": stats["matchup_slg"],
             "K_rate": stats["k_rate"],
         }
-        result["outcome_distribution"] = {
+        data["outcome_distribution"] = {
             "groundball": stats["gb_rate"],
             "flyball": stats["fb_rate"],
             "line_drive": stats["ld_rate"],
         }
     else:
-        # No prior matchup history: return nulls for direct stats
-        result["matchup_stats"] = None
-        result["outcome_distribution"] = None
-        result["no_history_message"] = (
-            "No prior matchup history between these players. "
-            "The similarity-model projected wOBA below is the best available estimate."
-        )
+        # No prior matchup history: include fields as null with explanation
+        data["matchup_stats"] = unavailable(
+            "No prior matchup history between these players.")
+        data["outcome_distribution"] = unavailable(
+            "No prior matchup history between these players.")
 
     # Always include similarity-model projection (most useful when sample is small/none)
-    result["similarity_projected_wOBA"] = stats["projected_woba"]
+    data["similarity_projected_wOBA"] = stats["projected_woba"]
 
     # Pitch-type vulnerability breakdown
-    result["pitch_type_vulnerability"] = pitch_vuln
+    data["pitch_type_vulnerability"] = pitch_vuln
 
-    return json.dumps(result)
+    return success_response(TOOL_NAME, data)

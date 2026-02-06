@@ -17,6 +17,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response
+
 # ---------------------------------------------------------------------------
 # Load pre-computed tables from JSON files at module load time.
 # ---------------------------------------------------------------------------
@@ -128,35 +130,25 @@ def get_win_probability(
     Returns:
         JSON string with win probability data.
     """
+    TOOL_NAME = "get_win_probability"
+
     # --- Input validation ---
     if not isinstance(inning, int) or inning < 1:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid inning value: {inning}. Must be a positive integer (1+).",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid inning value: {inning}. Must be a positive integer (1+).")
 
     half_upper = half.upper() if isinstance(half, str) else ""
     if half_upper not in ("TOP", "BOTTOM"):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid half value: '{half}'. Must be 'TOP' or 'BOTTOM'.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid half value: '{half}'. Must be 'TOP' or 'BOTTOM'.")
 
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     if not isinstance(score_differential, int):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid score_differential: {score_differential}. Must be an integer.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid score_differential: {score_differential}. Must be an integer.")
 
     # Clamp extreme differentials for table lookup
     clamped_diff = max(-10, min(10, score_differential))
@@ -209,8 +201,7 @@ def get_win_probability(
     else:
         wp_if_scoreless = round(max(0.01, min(0.99, away_wp_scoreless)), 3)
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "game_state": {
             "inning": inning,
             "half": half_upper,

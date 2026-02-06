@@ -10,6 +10,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref, unavailable
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
 # ---------------------------------------------------------------------------
@@ -236,46 +238,33 @@ def get_batter_stats(
     """
     _load_players()
 
+    TOOL_NAME = "get_batter_stats"
+
     # Validate player_id
     if player_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{player_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{player_id}' not found in any roster.")
 
     player = _PLAYERS[player_id]
 
     # Validate optional parameters
     if vs_hand is not None and vs_hand not in ("L", "R"):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid vs_hand value '{vs_hand}'. Must be 'L' or 'R'.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid vs_hand value '{vs_hand}'. Must be 'L' or 'R'.")
 
     if home_away is not None and home_away not in ("home", "away"):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid home_away value '{home_away}'. Must be 'home' or 'away'.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid home_away value '{home_away}'. Must be 'home' or 'away'.")
 
     valid_recency = ("last_7", "last_14", "last_30", "season")
     if recency_window is not None and recency_window not in valid_recency:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid recency_window value '{recency_window}'. Must be one of {valid_recency}.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid recency_window value '{recency_window}'. Must be one of {valid_recency}.")
 
     # Check if the player has batter attributes
     if "batter" not in player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_BATTER",
-            "message": f"Player '{player_id}' ({player.get('name', 'unknown')}) does not have batting attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_BATTER",
+                              f"Player '{player_id}' ({player.get('name', 'unknown')}) does not have batting attributes.")
 
     # Derive stats from player attributes
     stats = _derive_stats(player, vs_hand, home_away, recency_window)
@@ -285,10 +274,8 @@ def get_batter_stats(
         "AB": 0, "H": 0, "BB": 0, "K": 0, "RBI": 0,
     })
 
-    return json.dumps({
-        "status": "ok",
-        "player_id": player_id,
-        "player_name": player.get("name", "Unknown"),
+    return success_response(TOOL_NAME, {
+        **player_ref(player_id, player.get("name", "Unknown")),
         "bats": player.get("bats", "R"),
         "splits": {
             "vs_hand": vs_hand,

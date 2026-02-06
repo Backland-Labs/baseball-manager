@@ -14,6 +14,8 @@ from pathlib import Path
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player + team lookups
 # ---------------------------------------------------------------------------
@@ -327,30 +329,22 @@ def get_platoon_comparison(
         JSON string with platoon comparison.
     """
     _load_players()
+    TOOL_NAME = "get_platoon_comparison"
 
     # --- Validate current_batter_id ---
     if current_batter_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{current_batter_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{current_batter_id}' not found in any roster.")
 
     # --- Validate pinch_hitter_id ---
     if pinch_hitter_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{pinch_hitter_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{pinch_hitter_id}' not found in any roster.")
 
     # --- Validate pitcher_id ---
     if pitcher_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{pitcher_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{pitcher_id}' not found in any roster.")
 
     current_player = _PLAYERS[current_batter_id]
     pinch_hitter_player = _PLAYERS[pinch_hitter_id]
@@ -359,11 +353,8 @@ def get_platoon_comparison(
     # --- Validate pitcher has pitcher data to get throw hand ---
     pitcher_data = pitcher_player.get("pitcher")
     if not pitcher_data:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_PITCHER",
-            "message": f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitcher attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_PITCHER",
+                              f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitcher attributes.")
 
     pitcher_hand = pitcher_player.get("throws", "R")
 
@@ -411,8 +402,7 @@ def get_platoon_comparison(
     pinch_team = _PLAYER_TEAM.get(pinch_hitter_id, "home")
     bench_impact = _compute_bench_depth_impact(pinch_hitter_id, pinch_team)
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "current_batter": {
             "player_id": current_batter_id,
             "name": current_player.get("name", "Unknown"),

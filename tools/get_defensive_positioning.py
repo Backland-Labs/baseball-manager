@@ -15,6 +15,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
 # ---------------------------------------------------------------------------
@@ -425,56 +427,40 @@ def get_defensive_positioning(
     """
     _load_players()
 
+    TOOL_NAME = "get_defensive_positioning"
+
     # --- Validate batter_id ---
     if batter_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{batter_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{batter_id}' not found in any roster.")
 
     # --- Validate pitcher_id ---
     if pitcher_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{pitcher_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                              f"Player '{pitcher_id}' not found in any roster.")
 
     batter_player = _PLAYERS[batter_id]
     pitcher_player = _PLAYERS[pitcher_id]
 
     # --- Validate batter has batter attributes ---
     if "batter" not in batter_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_BATTER",
-            "message": f"Player '{batter_id}' ({batter_player.get('name', 'unknown')}) does not have batting attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_BATTER",
+                              f"Player '{batter_id}' ({batter_player.get('name', 'unknown')}) does not have batting attributes.")
 
     # --- Validate pitcher has pitcher attributes ---
     if "pitcher" not in pitcher_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_PITCHER",
-            "message": f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitching attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_PITCHER",
+                              f"Player '{pitcher_id}' ({pitcher_player.get('name', 'unknown')}) does not have pitching attributes.")
 
     # --- Validate outs ---
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     # --- Validate inning ---
     if not isinstance(inning, int) or inning < 1:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid inning value: {inning}. Must be 1 or greater.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid inning value: {inning}. Must be 1 or greater.")
 
     batter_attrs = batter_player["batter"]
     pitcher_attrs = pitcher_player["pitcher"]
@@ -504,8 +490,7 @@ def get_defensive_positioning(
     # --- Recommend shift ---
     shift_rec = _recommend_shift(spray_chart, bats)
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "batter_id": batter_id,
         "batter_name": batter_player.get("name", "Unknown"),
         "bats": bats,

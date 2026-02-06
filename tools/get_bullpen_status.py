@@ -12,13 +12,9 @@ for each reliever. Accepts optional parameters to reflect in-game state
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from anthropic import beta_tool
-
-# ---------------------------------------------------------------------------
-# Load roster data and build player lookup
-# ---------------------------------------------------------------------------
+from tools.response import success_response, error_response
 
 _ROSTER_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_rosters.json"
 
@@ -42,17 +38,10 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-# ---------------------------------------------------------------------------
-# Derive platoon splits from pitcher attributes
-# ---------------------------------------------------------------------------
-
-
 def _derive_era(pitcher_attrs: dict, vs_hand: str) -> float:
     """Get ERA vs a given batter hand directly from pitcher attributes."""
-    if vs_hand == "L":
-        return pitcher_attrs.get("era_vs_l", 4.00)
-    else:
-        return pitcher_attrs.get("era_vs_r", 4.00)
+    key = "era_vs_l" if vs_hand == "L" else "era_vs_r"
+    return pitcher_attrs.get(key, 4.00)
 
 
 def _era_to_whip(era: float) -> float:
@@ -66,35 +55,23 @@ def _era_to_woba(era: float) -> float:
 
 
 def _era_to_k_rate(pitcher_attrs: dict, era: float) -> float:
-    """Approximate K% from stuff and ERA. Higher stuff and lower ERA = more strikeouts."""
-    stuff = pitcher_attrs.get("stuff", 50)
-    # Base K% from stuff: stuff 50 = ~20%, stuff 100 = ~35%, stuff 0 = ~10%
-    base_k = 0.10 + (stuff / 100) * 0.25
-    # ERA adjustment: lower ERA correlates with higher K%
-    era_adj = (4.00 - era) * 0.01  # each 1.00 ERA below 4.00 = +1% K rate
-    return round(_clamp(base_k + era_adj, 0.08, 0.40), 3)
+    """Approximate K% from stuff and ERA."""
+    base_k = 0.10 + (pitcher_attrs.get("stuff", 50) / 100) * 0.25
+    return round(_clamp(base_k + (4.00 - era) * 0.01, 0.08, 0.40), 3)
 
 
 def _era_to_bb_rate(pitcher_attrs: dict, era: float) -> float:
-    """Approximate BB% from control and ERA. Higher control = fewer walks."""
-    control = pitcher_attrs.get("control", 50)
-    # Base BB% from control: control 50 = ~9%, control 100 = ~3%, control 0 = ~15%
-    base_bb = 0.15 - (control / 100) * 0.12
-    # ERA adjustment: higher ERA correlates with slightly higher BB%
-    era_adj = (era - 4.00) * 0.005
-    return round(_clamp(base_bb + era_adj, 0.02, 0.18), 3)
+    """Approximate BB% from control and ERA."""
+    base_bb = 0.15 - (pitcher_attrs.get("control", 50) / 100) * 0.12
+    return round(_clamp(base_bb + (era - 4.00) * 0.005, 0.02, 0.18), 3)
 
 
 def _derive_platoon_splits(pitcher_attrs: dict) -> dict:
-    """Derive full platoon split stats from pitcher attributes.
-
-    Returns splits vs LHB and vs RHB with ERA, WHIP, wOBA-against, K%, and BB%.
-    """
+    """Derive platoon split stats (ERA, WHIP, wOBA, K%, BB%) vs LHB and RHB."""
     splits = {}
     for hand in ("L", "R"):
-        label = f"vs_LHB" if hand == "L" else "vs_RHB"
         era = _derive_era(pitcher_attrs, hand)
-        splits[label] = {
+        splits[f"vs_{hand}HB"] = {
             "ERA": round(era, 2),
             "WHIP": _era_to_whip(era),
             "wOBA_against": _era_to_woba(era),
@@ -104,49 +81,23 @@ def _derive_platoon_splits(pitcher_attrs: dict) -> dict:
     return splits
 
 
-# ---------------------------------------------------------------------------
-# Derive freshness from pitch counts and days rest
-# ---------------------------------------------------------------------------
-
-
 def _derive_freshness(
     pitch_counts_last_3: list[int],
     days_since_last: int,
     stamina: float,
 ) -> str:
-    """Derive freshness level from recent workload and stamina attribute.
+    """Derive freshness (FRESH/MODERATE/TIRED) from workload and stamina."""
+    stamina_factor = stamina / 100.0
+    tired_threshold = 25 + stamina_factor * 40
+    moderate_threshold = 12 + stamina_factor * 25
 
-    Freshness categories:
-    - FRESH: well-rested, low recent workload
-    - MODERATE: some recent usage but still effective
-    - TIRED: heavy recent usage, diminished effectiveness
-
-    Factors:
-    - Total pitches in last 3 days
-    - Days since last appearance
-    - Stamina attribute (higher stamina = recovers faster)
-    """
-    total_pitches = sum(pitch_counts_last_3)
-
-    # Stamina-adjusted thresholds:
-    # Higher stamina raises the threshold before a pitcher gets tired
-    # Stamina 30 (typical closer) -> tired at 30 pitches, moderate at 15
-    # Stamina 55 (long reliever) -> tired at 50 pitches, moderate at 30
-    stamina_factor = stamina / 100.0  # 0.0 to 1.0
-    tired_threshold = 25 + stamina_factor * 40  # 25-65 pitches
-    moderate_threshold = 12 + stamina_factor * 25  # 12-37 pitches
-
-    # Days of rest reduce workload impact
-    # Each day of rest "forgives" some pitch load
-    rest_relief = days_since_last * 10
-    effective_load = max(0, total_pitches - rest_relief)
+    effective_load = max(0, sum(pitch_counts_last_3) - days_since_last * 10)
 
     if effective_load >= tired_threshold:
         return "TIRED"
     elif effective_load >= moderate_threshold:
         return "MODERATE"
-    else:
-        return "FRESH"
+    return "FRESH"
 
 
 def _derive_availability(
@@ -155,45 +106,25 @@ def _derive_availability(
     days_since_last: int,
     stamina: float,
 ) -> tuple[bool, str | None]:
-    """Determine if a pitcher is available and why they might not be.
-
-    A pitcher is unavailable if:
-    - They pitched in 3 consecutive days (need mandatory rest) unless high stamina
-    - Their total recent workload is extreme (3-day total > stamina-based limit)
-    - They are marked as TIRED and pitched yesterday with high pitch count
-
-    Returns (available, reason_if_unavailable).
-    """
+    """Determine availability and reason if unavailable."""
     total_pitches = sum(pitch_counts_last_3)
     days_with_appearances = sum(1 for p in pitch_counts_last_3 if p > 0)
 
-    # Rule: 3 consecutive appearances -> unavailable unless very high stamina
     if days_with_appearances >= 3 and stamina < 50:
         return False, "Pitched 3 consecutive days, needs rest"
-
-    # Rule: extreme workload (total > 60 pitches in 3 days for low-stamina pitchers)
-    max_3_day = 40 + stamina * 0.5  # 40-90 pitch 3-day max
-    if total_pitches > max_3_day:
+    if total_pitches > 40 + stamina * 0.5:
         return False, f"Heavy 3-day workload ({total_pitches} pitches)"
-
-    # Rule: pitched yesterday with 30+ pitches and low stamina
     if days_since_last == 0 and pitch_counts_last_3[0] >= 30 and stamina < 40:
         return False, "Pitched today with high pitch count"
-
     return True, None
-
-
-# ---------------------------------------------------------------------------
-# Tool function
-# ---------------------------------------------------------------------------
 
 
 @beta_tool
 def get_bullpen_status(
     team: str = "home",
-    used_pitcher_ids: Optional[str] = None,
-    warming_pitcher_ids: Optional[str] = None,
-    ready_pitcher_ids: Optional[str] = None,
+    used_pitcher_ids: str | None = None,
+    warming_pitcher_ids: str | None = None,
+    ready_pitcher_ids: str | None = None,
 ) -> str:
     """Returns detailed status of all bullpen pitchers for the managed team
     including availability, stats, freshness, rest days, recent pitch counts,
@@ -208,81 +139,50 @@ def get_bullpen_status(
         JSON string with bullpen status for all available relievers.
     """
     rosters = _load_rosters()
+    TOOL_NAME = "get_bullpen_status"
 
-    # --- Validate team parameter ---
     if team not in ("home", "away"):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid team value: '{team}'. Must be 'home' or 'away'.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid team value: '{team}'. Must be 'home' or 'away'.")
 
     team_data = rosters.get(team)
     if not team_data:
-        return json.dumps({
-            "status": "error",
-            "error_code": "ROSTER_NOT_FOUND",
-            "message": f"No roster data found for team '{team}'.",
-        })
+        return error_response(TOOL_NAME, "ROSTER_NOT_FOUND",
+            f"No roster data found for team '{team}'.")
 
     bullpen_data = team_data.get("bullpen", [])
     if not bullpen_data:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NO_BULLPEN",
-            "message": f"No bullpen pitchers found for team '{team}'.",
-        })
+        return error_response(TOOL_NAME, "NO_BULLPEN",
+            f"No bullpen pitchers found for team '{team}'.")
 
     # Parse comma-separated ID lists
-    used_ids = set()
-    if used_pitcher_ids:
-        used_ids = {pid.strip() for pid in used_pitcher_ids.split(",") if pid.strip()}
+    def _parse_ids(csv: str | None) -> set[str]:
+        return {p.strip() for p in csv.split(",") if p.strip()} if csv else set()
 
-    warming_ids = set()
-    if warming_pitcher_ids:
-        warming_ids = {pid.strip() for pid in warming_pitcher_ids.split(",") if pid.strip()}
+    used_ids = _parse_ids(used_pitcher_ids)
+    warming_ids = _parse_ids(warming_pitcher_ids)
+    ready_ids = _parse_ids(ready_pitcher_ids)
 
-    ready_ids = set()
-    if ready_pitcher_ids:
-        ready_ids = {pid.strip() for pid in ready_pitcher_ids.split(",") if pid.strip()}
-
-    # --- Build bullpen status for each pitcher ---
     pitchers = []
     for bp in bullpen_data:
         pid = bp["player_id"]
 
-        # Step 9: Pitchers already used and removed in this game are excluded
         if pid in used_ids:
             continue
 
         pitcher_attrs = bp.get("pitcher", {})
         role = bp.get("role", "MIDDLE")
-        throws = bp.get("bats", "R")  # For pitchers, 'bats' in roster may be handedness
-        # Check for explicit throws field, or derive from roster structure
-        if "throws" in bp:
-            throws = bp["throws"]
-
+        throws = bp.get("throws", bp.get("bats", "R"))
         stamina = pitcher_attrs.get("stamina", 40)
 
-        # For the simulation, we derive plausible recent usage from the pitcher's
-        # role and stamina. In a real game, these would come from actual game logs.
-        # Closers/setup: pitch less often but in shorter stints.
-        # Long/mopup: pitch more innings when they appear.
         pitch_counts_last_3 = _derive_recent_pitch_counts(role, stamina, pid)
         days_since_last = _derive_days_since_last(role, pid)
-
-        # Derive freshness from workload
         freshness = _derive_freshness(pitch_counts_last_3, days_since_last, stamina)
-
-        # Derive availability
         available, unavailable_reason = _derive_availability(
             freshness, pitch_counts_last_3, days_since_last, stamina
         )
-
-        # Derive platoon splits
         platoon_splits = _derive_platoon_splits(pitcher_attrs)
 
-        # Determine warm-up state
         if pid in ready_ids:
             warmup_state = "ready"
         elif pid in warming_ids:
@@ -308,12 +208,10 @@ def get_bullpen_status(
             "stamina": stamina,
         })
 
-    # Sort by role priority: CLOSER > SETUP > MIDDLE > LONG > MOPUP
     role_order = {"CLOSER": 0, "SETUP": 1, "MIDDLE": 2, "LONG": 3, "MOPUP": 4}
     pitchers.sort(key=lambda p: role_order.get(p["role"], 5))
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "team": team,
         "team_name": team_data.get("team_name", "Unknown"),
         "bullpen_count": len(pitchers),
@@ -322,67 +220,19 @@ def get_bullpen_status(
     })
 
 
-# ---------------------------------------------------------------------------
-# Helpers for deriving plausible recent usage from role/stamina
-# ---------------------------------------------------------------------------
+_PITCH_PATTERNS: dict[str, list[list[int]]] = {
+    "CLOSER": [[0,15,0], [14,0,0], [0,0,16], [0,0,0], [15,0,18]],
+    "SETUP":  [[0,22,0], [18,0,20], [0,0,0], [20,0,0], [0,18,22]],
+    "MIDDLE": [[25,0,0], [0,0,28], [0,22,0], [0,0,0], [22,0,25]],
+    "LONG":   [[0,0,45], [0,0,0], [0,40,0], [0,0,0], [0,0,50]],
+    "MOPUP":  [[0,0,0], [0,35,0], [0,0,40], [0,0,0], [30,0,0]],
+}
 
 
 def _derive_recent_pitch_counts(role: str, stamina: float, player_id: str) -> list[int]:
-    """Derive plausible recent pitch counts based on role and a deterministic hash.
-
-    In a real system these come from game logs. Here we use the player_id hash
-    to create deterministic but varied usage patterns.
-    """
-    # Use player_id hash for deterministic variety
+    """Derive deterministic recent pitch counts from role and player_id hash."""
     h = sum(ord(c) for c in player_id)
-
-    if role == "CLOSER":
-        # Closers pitch 1 inning, 12-20 pitches when they appear
-        # Appear roughly every 2-3 days
-        patterns = [
-            [0, 15, 0],    # pitched day before yesterday
-            [14, 0, 0],    # pitched yesterday
-            [0, 0, 16],    # pitched 3 days ago
-            [0, 0, 0],     # well rested
-            [15, 0, 18],   # pitched yesterday and 3 days ago
-        ]
-    elif role == "SETUP":
-        # Setup men pitch 1-1.5 innings, 15-25 pitches
-        patterns = [
-            [0, 22, 0],
-            [18, 0, 20],
-            [0, 0, 0],
-            [20, 0, 0],
-            [0, 18, 22],
-        ]
-    elif role == "MIDDLE":
-        # Middle relievers: 1-2 innings, 18-30 pitches
-        patterns = [
-            [25, 0, 0],
-            [0, 0, 28],
-            [0, 22, 0],
-            [0, 0, 0],
-            [22, 0, 25],
-        ]
-    elif role == "LONG":
-        # Long relievers: 2-4 innings when used, but less frequently
-        patterns = [
-            [0, 0, 45],
-            [0, 0, 0],
-            [0, 40, 0],
-            [0, 0, 0],
-            [0, 0, 50],
-        ]
-    else:
-        # MOPUP: varies widely
-        patterns = [
-            [0, 0, 0],
-            [0, 35, 0],
-            [0, 0, 40],
-            [0, 0, 0],
-            [30, 0, 0],
-        ]
-
+    patterns = _PITCH_PATTERNS.get(role, _PITCH_PATTERNS["MOPUP"])
     return patterns[h % len(patterns)]
 
 
@@ -391,15 +241,12 @@ def _derive_days_since_last(role: str, player_id: str) -> int:
     h = sum(ord(c) for c in player_id)
     pitch_counts = _derive_recent_pitch_counts(role, 0, player_id)
 
-    # Find most recent day with pitches (index 0 = today/yesterday, 1 = 2 days ago, etc.)
     for i, count in enumerate(pitch_counts):
         if count > 0:
-            return i + 1  # 1-indexed: 1 = yesterday, 2 = day before, 3 = three days ago
+            return i + 1
 
-    # No recent appearances
     if role == "CLOSER":
-        return 3 + (h % 3)  # 3-5 days
+        return 3 + (h % 3)
     elif role in ("SETUP", "MIDDLE"):
-        return 3 + (h % 4)  # 3-6 days
-    else:
-        return 4 + (h % 5)  # 4-8 days
+        return 3 + (h % 4)
+    return 4 + (h % 5)

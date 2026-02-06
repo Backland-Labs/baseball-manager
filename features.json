@@ -445,7 +445,7 @@
   {
     "category": "technical",
     "name": "structured_tool_responses",
-    "passing": false,
+    "passing": true,
     "description": "All tool responses use a consistent JSON format so the agent can reliably parse and reason about the data.",
     "steps": [
       "Every tool returns a JSON object with a consistent top-level structure (success/error status, data payload)",

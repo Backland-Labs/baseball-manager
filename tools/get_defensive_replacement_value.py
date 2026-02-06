@@ -16,6 +16,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
 # ---------------------------------------------------------------------------
@@ -309,72 +311,49 @@ def get_defensive_replacement_value(
         offensive downgrade, innings remaining, net value, and recommendation.
     """
     _load_players()
+    TOOL_NAME = "get_defensive_replacement_value"
 
     # --- Validate current_fielder_id ---
     if current_fielder_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{current_fielder_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+            f"Player '{current_fielder_id}' not found in any roster.")
 
     # --- Validate replacement_id ---
     if replacement_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{replacement_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+            f"Player '{replacement_id}' not found in any roster.")
 
     # --- Validate position ---
     position_upper = position.upper()
     if position_upper not in VALID_POSITIONS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_POSITION",
-            "message": f"Invalid position '{position}'. Must be one of: {', '.join(sorted(VALID_POSITIONS))}.",
-        })
+        return error_response(TOOL_NAME, "INVALID_POSITION",
+            f"Invalid position '{position}'. Must be one of: {', '.join(sorted(VALID_POSITIONS))}.")
 
     # --- Validate inning ---
     if not isinstance(inning, int) or inning < 1:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid inning value: {inning}. Must be 1 or greater.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid inning value: {inning}. Must be 1 or greater.")
 
     # --- Validate half ---
     if half not in ("top", "bottom"):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid half value: '{half}'. Must be 'top' or 'bottom'.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid half value: '{half}'. Must be 'top' or 'bottom'.")
 
     # --- Validate outs ---
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     current_player = _PLAYERS[current_fielder_id]
     replacement_player = _PLAYERS[replacement_id]
 
     # --- Validate both have fielder attributes ---
     if "fielder" not in current_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NO_FIELDER_DATA",
-            "message": f"Player '{current_fielder_id}' ({current_player.get('name', 'unknown')}) has no fielder attributes.",
-        })
+        return error_response(TOOL_NAME, "NO_FIELDER_DATA",
+            f"Player '{current_fielder_id}' ({current_player.get('name', 'unknown')}) has no fielder attributes.")
     if "fielder" not in replacement_player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NO_FIELDER_DATA",
-            "message": f"Player '{replacement_id}' ({replacement_player.get('name', 'unknown')}) has no fielder attributes.",
-        })
+        return error_response(TOOL_NAME, "NO_FIELDER_DATA",
+            f"Player '{replacement_id}' ({replacement_player.get('name', 'unknown')}) has no fielder attributes.")
 
     current_fielder = current_player["fielder"]
     replacement_fielder = replacement_player["fielder"]
@@ -420,8 +399,7 @@ def get_defensive_replacement_value(
     # --- Recommendation ---
     rec = _recommendation(net_value)
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "current_fielder": {
             "player_id": current_fielder_id,
             "name": current_player.get("name", "Unknown"),

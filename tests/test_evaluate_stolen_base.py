@@ -38,6 +38,16 @@ def parse(result: str) -> dict:
     return json.loads(result)
 
 
+def parse_data(result: str) -> dict:
+    """Parse a success response and return the data dict with status included."""
+    parsed = json.loads(result)
+    assert parsed["status"] == "ok"
+    assert parsed["tool"] == "evaluate_stolen_base"
+    data = parsed["data"]
+    data["status"] = "ok"
+    return data
+
+
 # -----------------------------------------------------------------------
 # Step 1: Accepts runner, target base, pitcher, and catcher identifiers
 # -----------------------------------------------------------------------
@@ -45,11 +55,10 @@ def parse(result: str) -> dict:
 def test_step1_basic_steal_2nd():
     """Step 1: Accepts valid player IDs and returns ok status for steal of 2nd."""
     # h_001 = Marcus Chen (speed 85), a_sp1 = Matt Henderson, a_009 = Diego Santos (catcher)
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    assert result["status"] == "ok"
     assert result["runner_id"] == "h_001"
     assert result["target_base"] == 2
     assert result["pitcher_id"] == "a_sp1"
@@ -58,27 +67,25 @@ def test_step1_basic_steal_2nd():
 
 def test_step1_basic_steal_3rd():
     """Step 1: Accepts valid player IDs for steal of 3rd."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 3, "a_sp1", "a_009",
         runner_on_second=True, outs=0,
     ))
-    assert result["status"] == "ok"
     assert result["target_base"] == 3
 
 
 def test_step1_steal_home():
     """Step 1: Accepts steal of home (target_base=4)."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 4, "a_sp1", "a_009",
         runner_on_third=True, outs=0,
     ))
-    assert result["status"] == "ok"
     assert result["target_base"] == 4
 
 
 def test_step1_includes_player_names():
     """Step 1: Response includes runner, pitcher, and catcher names."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -89,7 +96,7 @@ def test_step1_includes_player_names():
 
 def test_step1_base_out_state_in_response():
     """Step 1: Response includes the base-out state used for computation."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, runner_on_third=True, outs=1,
     ))
@@ -104,7 +111,7 @@ def test_step1_base_out_state_in_response():
 
 def test_step2_success_probability_present():
     """Step 2: Response includes success_probability field."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -114,7 +121,7 @@ def test_step2_success_probability_present():
 
 def test_step2_success_probability_range():
     """Step 2: Success probability is between 0 and 1."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -124,11 +131,11 @@ def test_step2_success_probability_range():
 def test_step2_fast_runner_higher_probability():
     """Step 2: A fast runner should have higher success probability than a slow runner."""
     # h_001 = Marcus Chen (speed 85), h_003 = Rafael Ortiz (speed 40)
-    fast = parse(evaluate_stolen_base(
+    fast = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    slow = parse(evaluate_stolen_base(
+    slow = parse_data(evaluate_stolen_base(
         "h_003", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -139,11 +146,11 @@ def test_step2_fast_runner_higher_probability():
 def test_step2_better_catcher_lower_probability():
     """Step 2: A better catcher should reduce success probability."""
     # a_009 = Diego Santos (pop_time 1.92), a_010 = James Wright (pop_time 2.02)
-    vs_good_catcher = parse(evaluate_stolen_base(
+    vs_good_catcher = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    vs_weak_catcher = parse(evaluate_stolen_base(
+    vs_weak_catcher = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_010",
         runner_on_first=True, outs=0,
     ))
@@ -154,7 +161,7 @@ def test_step2_better_catcher_lower_probability():
 
 def test_step2_context_includes_derived_metrics():
     """Step 2: Response includes context with derived speed/hold/pop metrics."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -172,11 +179,11 @@ def test_step2_context_includes_derived_metrics():
 
 def test_step2_steal_3rd_lower_probability_than_2nd():
     """Step 2: Stealing 3rd should generally have lower success probability than stealing 2nd."""
-    steal_2nd = parse(evaluate_stolen_base(
+    steal_2nd = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    steal_3rd = parse(evaluate_stolen_base(
+    steal_3rd = parse_data(evaluate_stolen_base(
         "h_001", 3, "a_sp1", "a_009",
         runner_on_second=True, outs=0,
     ))
@@ -189,7 +196,7 @@ def test_step2_steal_3rd_lower_probability_than_2nd():
 
 def test_step3_breakeven_rate_present():
     """Step 3: Response includes breakeven_rate field."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -199,7 +206,7 @@ def test_step3_breakeven_rate_present():
 
 def test_step3_breakeven_rate_range():
     """Step 3: Breakeven rate is between 0.5 and 1.0 (always need > 50% to consider)."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -209,7 +216,7 @@ def test_step3_breakeven_rate_range():
 def test_step3_breakeven_matches_re_matrix():
     """Step 3: Breakeven rate should match the RE-matrix based calculation."""
     # Runner on 1st, 0 outs, steal 2nd
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -229,15 +236,15 @@ def test_step3_breakeven_varies_with_outs():
     # ~0.702 (2 outs). At 1 out, the ratio of loss-to-total is highest because
     # going from 1 to 2 outs is particularly costly. At 2 outs, the base RE is
     # already low, so the gain from success is proportionally larger.
-    be_0 = parse(evaluate_stolen_base(
+    be_0 = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))["breakeven_rate"]
-    be_1 = parse(evaluate_stolen_base(
+    be_1 = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=1,
     ))["breakeven_rate"]
-    be_2 = parse(evaluate_stolen_base(
+    be_2 = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=2,
     ))["breakeven_rate"]
@@ -250,7 +257,7 @@ def test_step3_breakeven_varies_with_outs():
 
 def test_step3_steal_2b_breakeven_known_range():
     """Step 3: Steal 2B breakeven from DESIGN.md should be ~71.5% with 0 outs."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -260,11 +267,11 @@ def test_step3_steal_2b_breakeven_known_range():
 
 def test_step3_steal_3b_breakeven_higher():
     """Step 3: Stealing 3rd should have higher breakeven than stealing 2nd."""
-    steal_2nd = parse(evaluate_stolen_base(
+    steal_2nd = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    steal_3rd = parse(evaluate_stolen_base(
+    steal_3rd = parse_data(evaluate_stolen_base(
         "h_001", 3, "a_sp1", "a_009",
         runner_on_second=True, outs=0,
     ))
@@ -278,7 +285,7 @@ def test_step3_steal_3b_breakeven_higher():
 
 def test_step4_re_changes_present():
     """Step 4: Response includes re_change_if_successful and re_change_if_caught."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -290,7 +297,7 @@ def test_step4_re_changes_present():
 
 def test_step4_steal_2b_success_positive_re():
     """Step 4: Successful steal of 2nd should have positive RE change."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -300,7 +307,7 @@ def test_step4_steal_2b_success_positive_re():
 
 def test_step4_caught_stealing_negative_re():
     """Step 4: Caught stealing should have negative RE change."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -310,7 +317,7 @@ def test_step4_caught_stealing_negative_re():
 
 def test_step4_re_changes_match_matrix():
     """Step 4: RE changes should match hand-computed values from RE matrix."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -325,14 +332,14 @@ def test_step4_re_changes_match_matrix():
 def test_step4_caught_always_negative():
     """Step 4: Being caught stealing is always a negative RE change at any out count."""
     for outs in (0, 1, 2):
-        result = parse(evaluate_stolen_base(
+        result = parse_data(evaluate_stolen_base(
             "h_001", 2, "a_sp1", "a_009",
             runner_on_first=True, outs=outs,
         ))
         assert result["re_change_if_caught"] < 0, \
             f"Caught RE should be negative at {outs} outs, got {result['re_change_if_caught']}"
     # Also verify the magnitude is significant: losing a baserunner always hurts
-    result_0 = parse(evaluate_stolen_base(
+    result_0 = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -341,7 +348,7 @@ def test_step4_caught_always_negative():
 
 def test_step4_steal_3b_re_changes():
     """Step 4: Steal of 3rd has correct RE change direction."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 3, "a_sp1", "a_009",
         runner_on_second=True, outs=0,
     ))
@@ -351,7 +358,7 @@ def test_step4_steal_3b_re_changes():
 
 def test_step4_steal_home_re_includes_run():
     """Step 4: Steal of home success should include the run scored (RE change > 0)."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 4, "a_sp1", "a_009",
         runner_on_third=True, outs=0,
     ))
@@ -365,7 +372,7 @@ def test_step4_steal_home_re_includes_run():
 
 def test_step5_net_re_present():
     """Step 5: Response includes net_expected_re_change field."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -375,7 +382,7 @@ def test_step5_net_re_present():
 
 def test_step5_net_re_formula():
     """Step 5: Net RE = P(success) * RE_success + P(caught) * RE_caught."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -390,7 +397,7 @@ def test_step5_net_re_formula():
 def test_step5_favorable_has_positive_net_re():
     """Step 5: A favorable recommendation should generally have positive net RE."""
     # Fast runner (h_001, speed 85) vs slow pitcher/catcher combo
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -404,7 +411,7 @@ def test_step5_favorable_has_positive_net_re():
 
 def test_step6_recommendation_present():
     """Step 6: Response includes recommendation field."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -414,7 +421,7 @@ def test_step6_recommendation_present():
 
 def test_step6_fast_runner_favorable():
     """Step 6: A fast runner (speed 85) should get favorable or marginal recommendation."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -425,7 +432,7 @@ def test_step6_fast_runner_favorable():
 def test_step6_slow_runner_unfavorable():
     """Step 6: A slow runner (speed 40) should get unfavorable recommendation."""
     # h_003 = Rafael Ortiz (speed 40)
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_003", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -436,7 +443,7 @@ def test_step6_slow_runner_unfavorable():
 def test_step6_recommendation_consistent_with_margin():
     """Step 6: Recommendation is consistent with success_prob - breakeven margin."""
     for runner_id in ("h_001", "h_002", "h_003", "h_007"):
-        result = parse(evaluate_stolen_base(
+        result = parse_data(evaluate_stolen_base(
             runner_id, 2, "a_sp1", "a_009",
             runner_on_first=True, outs=0,
         ))
@@ -463,6 +470,7 @@ def test_step7_invalid_runner_id():
         runner_on_first=True, outs=0,
     ))
     assert result["status"] == "error"
+    assert result["tool"] == "evaluate_stolen_base"
     assert result["error_code"] == "INVALID_PLAYER_ID"
     assert "runner" in result["message"]
 
@@ -663,7 +671,7 @@ def test_estimate_success_probability_average_inputs():
 def test_all_out_states_steal_2b():
     """Steal of 2nd works for all out counts."""
     for outs in (0, 1, 2):
-        result = parse(evaluate_stolen_base(
+        result = parse_data(evaluate_stolen_base(
             "h_001", 2, "a_sp1", "a_009",
             runner_on_first=True, outs=outs,
         ))
@@ -672,22 +680,20 @@ def test_all_out_states_steal_2b():
 
 def test_steal_2b_with_runner_on_third():
     """Steal 2nd with runners on 1st and 3rd (1st-and-3rd play)."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, runner_on_third=True, outs=0,
     ))
-    assert result["status"] == "ok"
     # RE should reflect the 1st & 3rd -> 2nd & 3rd transition
     assert result["re_change_if_successful"] > 0
 
 
 def test_steal_3b_with_runner_on_first():
     """Steal 3rd with runners on 1st and 2nd."""
-    result = parse(evaluate_stolen_base(
+    result = parse_data(evaluate_stolen_base(
         "h_002", 3, "a_sp1", "a_009",
         runner_on_first=True, runner_on_second=True, outs=0,
     ))
-    assert result["status"] == "ok"
 
 
 def test_json_parseable():
@@ -708,37 +714,42 @@ def test_json_parseable():
             runner_on_first=first, runner_on_second=second,
             runner_on_third=third, outs=outs,
         )
-        data = json.loads(raw)
-        assert isinstance(data, dict)
-        assert data["status"] == "ok"
+        envelope = json.loads(raw)
+        assert isinstance(envelope, dict)
+        assert envelope["status"] == "ok"
+        assert envelope["tool"] == "evaluate_stolen_base"
+        assert isinstance(envelope["data"], dict)
 
 
 def test_response_structure():
-    """Full response has all required top-level fields."""
-    result = parse(evaluate_stolen_base(
+    """Full response has all required top-level and data fields."""
+    envelope = parse(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
+    assert envelope["status"] == "ok"
+    assert envelope["tool"] == "evaluate_stolen_base"
+    data = envelope["data"]
     required_fields = [
-        "status", "runner_id", "runner_name", "target_base",
+        "runner_id", "runner_name", "target_base",
         "pitcher_id", "pitcher_name", "catcher_id", "catcher_name",
         "base_out_state", "success_probability", "breakeven_rate",
         "re_change_if_successful", "re_change_if_caught",
         "net_expected_re_change", "recommendation", "context",
     ]
     for field in required_fields:
-        assert field in result, f"Missing field: {field}"
+        assert field in data, f"Missing field: {field}"
 
 
 def test_different_pitchers_affect_probability():
     """Different pitchers should produce different success probabilities."""
     # a_sp1 = Matt Henderson (control 74, velocity 93.0)
     # a_bp1 = Zach Miller (control 73, velocity 98.0 -- much faster)
-    vs_sp = parse(evaluate_stolen_base(
+    vs_sp = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_sp1", "a_009",
         runner_on_first=True, outs=0,
     ))
-    vs_rp = parse(evaluate_stolen_base(
+    vs_rp = parse_data(evaluate_stolen_base(
         "h_001", 2, "a_bp1", "a_009",
         runner_on_first=True, outs=0,
     ))
@@ -751,11 +762,10 @@ def test_multiple_runners_different_results():
     runners = ["h_001", "h_002", "h_003", "h_007", "h_009"]
     probs = set()
     for r in runners:
-        result = parse(evaluate_stolen_base(
+        result = parse_data(evaluate_stolen_base(
             r, 2, "a_sp1", "a_009",
             runner_on_first=True, outs=0,
         ))
-        assert result["status"] == "ok"
         probs.add(result["success_probability"])
     # At least some distinct probabilities
     assert len(probs) > 1, "All runners had the same probability"

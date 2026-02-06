@@ -17,6 +17,7 @@ from typing import Optional
 from anthropic import beta_tool
 
 from tools.get_run_expectancy import RE_MATRIX, _runners_key, _get_re
+from tools.response import success_response, error_response, player_ref
 
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
@@ -217,6 +218,7 @@ def evaluate_stolen_base(
         JSON string with stolen base evaluation.
     """
     _load_players()
+    TOOL_NAME = "evaluate_stolen_base"
 
     # --- Validate player IDs ---
     for pid, label in [
@@ -225,67 +227,43 @@ def evaluate_stolen_base(
         (catcher_id, "catcher"),
     ]:
         if pid not in _PLAYERS:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_PLAYER_ID",
-                "message": f"Player '{pid}' ({label}) not found in any roster.",
-            })
+            return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+                f"Player '{pid}' ({label}) not found in any roster.")
 
     # --- Validate target base ---
     if target_base not in (2, 3, 4):
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid target_base value: {target_base}. Must be 2, 3, or 4.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid target_base value: {target_base}. Must be 2, 3, or 4.")
 
     # --- Validate outs ---
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     # --- Validate the steal attempt is logically consistent ---
     # Stealing 2nd requires runner on 1st and 2nd base open
     if target_base == 2:
         if not runner_on_first:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_SITUATION",
-                "message": "Cannot steal 2nd: no runner on first base.",
-            })
+            return error_response(TOOL_NAME, "INVALID_SITUATION",
+                "Cannot steal 2nd: no runner on first base.")
         if runner_on_second:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_SITUATION",
-                "message": "Cannot steal 2nd: second base is already occupied.",
-            })
+            return error_response(TOOL_NAME, "INVALID_SITUATION",
+                "Cannot steal 2nd: second base is already occupied.")
 
     # Stealing 3rd requires runner on 2nd and 3rd base open
     if target_base == 3:
         if not runner_on_second:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_SITUATION",
-                "message": "Cannot steal 3rd: no runner on second base.",
-            })
+            return error_response(TOOL_NAME, "INVALID_SITUATION",
+                "Cannot steal 3rd: no runner on second base.")
         if runner_on_third:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_SITUATION",
-                "message": "Cannot steal 3rd: third base is already occupied.",
-            })
+            return error_response(TOOL_NAME, "INVALID_SITUATION",
+                "Cannot steal 3rd: third base is already occupied.")
 
     # Stealing home requires runner on 3rd
     if target_base == 4:
         if not runner_on_third:
-            return json.dumps({
-                "status": "error",
-                "error_code": "INVALID_SITUATION",
-                "message": "Cannot steal home: no runner on third base.",
-            })
+            return error_response(TOOL_NAME, "INVALID_SITUATION",
+                "Cannot steal home: no runner on third base.")
 
     # --- Get player data ---
     runner = _PLAYERS[runner_id]
@@ -361,8 +339,7 @@ def evaluate_stolen_base(
         "catcher_pop_time_s": catcher_pop_time,
     }
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "runner_id": runner_id,
         "runner_name": runner.get("name", "Unknown"),
         "target_base": target_base,

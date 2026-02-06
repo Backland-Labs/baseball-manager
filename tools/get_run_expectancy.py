@@ -13,6 +13,8 @@ import json
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response
+
 # ---------------------------------------------------------------------------
 # Pre-computed 24-state run expectancy matrix (2023 MLB averages approximation)
 # Source: Retrosheet / Tom Tango's run expectancy tables
@@ -247,12 +249,11 @@ def get_run_expectancy(
     Returns:
         JSON string with run expectancy data.
     """
+    TOOL_NAME = "get_run_expectancy"
+
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+                              f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     key = _runners_key(runner_on_first, runner_on_second, runner_on_third)
     expected_runs = RE_MATRIX[key][outs]
@@ -266,8 +267,7 @@ def get_run_expectancy(
     # Common transition deltas
     transitions = _compute_transitions(runner_on_first, runner_on_second, runner_on_third, outs)
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "base_out_state": {
             "first": runner_on_first,
             "second": runner_on_second,

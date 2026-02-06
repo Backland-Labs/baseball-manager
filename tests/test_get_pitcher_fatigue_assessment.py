@@ -36,7 +36,10 @@ from tools.get_pitcher_fatigue_assessment import (
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    d = json.loads(result)
+    if "data" in d:
+        return {**d, **d.pop("data")}
+    return d
 
 
 # -----------------------------------------------------------------------

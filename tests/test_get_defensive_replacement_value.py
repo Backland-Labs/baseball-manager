@@ -37,7 +37,11 @@ from tools.get_defensive_replacement_value import (
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    raw = json.loads(result)
+    if raw.get("status") == "ok" and "data" in raw:
+        # Flatten: merge top-level status/tool with nested data for test access
+        return {"status": "ok", "tool": raw.get("tool"), **raw["data"]}
+    return raw
 
 
 # -----------------------------------------------------------------------

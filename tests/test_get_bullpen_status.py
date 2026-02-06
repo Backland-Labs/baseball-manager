@@ -43,13 +43,22 @@ def parse(result: str) -> dict:
     return json.loads(result)
 
 
+def parse_ok(result: str) -> dict:
+    """Parse a success response, returning the data payload with status merged in."""
+    raw = json.loads(result)
+    assert raw["status"] == "ok"
+    data = dict(raw["data"])
+    data["status"] = "ok"
+    return data
+
+
 # -----------------------------------------------------------------------
 # Step 1: Returns all bullpen pitchers for the managed team
 # -----------------------------------------------------------------------
 
 def test_step1_returns_all_home_bullpen():
     """Step 1: Returns all 8 home bullpen pitchers."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     assert result["status"] == "ok"
     assert result["team"] == "home"
     assert result["team_name"] == "Rivertown Otters"
@@ -59,7 +68,7 @@ def test_step1_returns_all_home_bullpen():
 
 def test_step1_returns_all_away_bullpen():
     """Step 1: Returns all 8 away bullpen pitchers."""
-    result = parse(get_bullpen_status("away"))
+    result = parse_ok(get_bullpen_status("away"))
     assert result["status"] == "ok"
     assert result["team"] == "away"
     assert result["team_name"] == "Lakewood Falcons"
@@ -69,7 +78,7 @@ def test_step1_returns_all_away_bullpen():
 
 def test_step1_default_team_is_home():
     """Step 1: Default team parameter is 'home'."""
-    result = parse(get_bullpen_status())
+    result = parse_ok(get_bullpen_status())
     assert result["team"] == "home"
     assert result["team_name"] == "Rivertown Otters"
 
@@ -84,7 +93,7 @@ def test_step1_invalid_team_returns_error():
 
 def test_step1_each_pitcher_has_player_id_and_name():
     """Step 1: Each pitcher has player_id and name."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "player_id" in p
         assert "name" in p
@@ -94,7 +103,7 @@ def test_step1_each_pitcher_has_player_id_and_name():
 
 def test_step1_each_pitcher_has_throws():
     """Step 1: Each pitcher has throws hand (L or R)."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "throws" in p
         assert p["throws"] in ("L", "R")
@@ -102,7 +111,7 @@ def test_step1_each_pitcher_has_throws():
 
 def test_step1_includes_available_count():
     """Step 1: Response includes count of available pitchers."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     assert "available_count" in result
     assert isinstance(result["available_count"], int)
     assert result["available_count"] <= result["bullpen_count"]
@@ -110,7 +119,7 @@ def test_step1_includes_available_count():
 
 def test_step1_home_pitcher_ids_match_roster():
     """Step 1: All returned pitcher IDs match the home bullpen in sample_rosters.json."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     expected_ids = {f"h_bp{i}" for i in range(1, 9)}
     actual_ids = {p["player_id"] for p in result["bullpen"]}
     assert actual_ids == expected_ids
@@ -118,7 +127,7 @@ def test_step1_home_pitcher_ids_match_roster():
 
 def test_step1_away_pitcher_ids_match_roster():
     """Step 1: All returned pitcher IDs match the away bullpen in sample_rosters.json."""
-    result = parse(get_bullpen_status("away"))
+    result = parse_ok(get_bullpen_status("away"))
     expected_ids = {f"a_bp{i}" for i in range(1, 9)}
     actual_ids = {p["player_id"] for p in result["bullpen"]}
     assert actual_ids == expected_ids
@@ -130,7 +139,7 @@ def test_step1_away_pitcher_ids_match_roster():
 
 def test_step2_each_pitcher_has_availability():
     """Step 2: Each pitcher has available boolean and unavailable_reason."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "available" in p
         assert isinstance(p["available"], bool)
@@ -191,7 +200,7 @@ def test_step2_high_pitch_count_today_low_stamina():
 
 def test_step3_each_pitcher_has_role():
     """Step 3: Each pitcher includes a valid role."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     valid_roles = {"CLOSER", "SETUP", "MIDDLE", "LONG", "MOPUP"}
     for p in result["bullpen"]:
         assert "role" in p
@@ -200,7 +209,7 @@ def test_step3_each_pitcher_has_role():
 
 def test_step3_role_distribution():
     """Step 3: Bullpen has expected role distribution."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     roles = [p["role"] for p in result["bullpen"]]
     assert roles.count("CLOSER") == 1
     assert roles.count("SETUP") == 2
@@ -211,7 +220,7 @@ def test_step3_role_distribution():
 
 def test_step3_sorted_by_role_priority():
     """Step 3: Pitchers are sorted by role priority (CLOSER first, MOPUP last)."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     role_order = {"CLOSER": 0, "SETUP": 1, "MIDDLE": 2, "LONG": 3, "MOPUP": 4}
     roles = [role_order[p["role"]] for p in result["bullpen"]]
     assert roles == sorted(roles)
@@ -223,7 +232,7 @@ def test_step3_sorted_by_role_priority():
 
 def test_step4_each_pitcher_has_freshness():
     """Step 4: Each pitcher includes a valid freshness level."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     valid_freshness = {"FRESH", "MODERATE", "TIRED"}
     for p in result["bullpen"]:
         assert "freshness" in p
@@ -272,7 +281,7 @@ def test_step4_stamina_affects_thresholds():
 
 def test_step5_each_pitcher_has_days_since_last():
     """Step 5: Each pitcher includes days_since_last_appearance."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "days_since_last_appearance" in p
         assert isinstance(p["days_since_last_appearance"], int)
@@ -281,7 +290,7 @@ def test_step5_each_pitcher_has_days_since_last():
 
 def test_step5_days_since_last_consistent_with_pitch_counts():
     """Step 5: Days since last appearance is consistent with pitch count history."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         counts = p["pitch_counts_last_3"]
         days = p["days_since_last_appearance"]
@@ -318,7 +327,7 @@ def test_step5_days_since_last_derivation():
 
 def test_step6_each_pitcher_has_pitch_counts():
     """Step 6: Each pitcher includes pitch_counts_last_3."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "pitch_counts_last_3" in p
         counts = p["pitch_counts_last_3"]
@@ -331,7 +340,7 @@ def test_step6_each_pitcher_has_pitch_counts():
 
 def test_step6_pitch_counts_are_realistic():
     """Step 6: Pitch counts are in realistic ranges for each role."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         counts = p["pitch_counts_last_3"]
         for c in counts:
@@ -345,8 +354,8 @@ def test_step6_pitch_counts_are_realistic():
 
 def test_step6_pitch_counts_deterministic():
     """Step 6: Pitch counts are deterministic across calls."""
-    result1 = parse(get_bullpen_status("home"))
-    result2 = parse(get_bullpen_status("home"))
+    result1 = parse_ok(get_bullpen_status("home"))
+    result2 = parse_ok(get_bullpen_status("home"))
     for p1, p2 in zip(result1["bullpen"], result2["bullpen"]):
         assert p1["pitch_counts_last_3"] == p2["pitch_counts_last_3"]
 
@@ -357,7 +366,7 @@ def test_step6_pitch_counts_deterministic():
 
 def test_step7_each_pitcher_has_platoon_splits():
     """Step 7: Each pitcher includes platoon_splits with vs_LHB and vs_RHB."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "platoon_splits" in p
         splits = p["platoon_splits"]
@@ -367,7 +376,7 @@ def test_step7_each_pitcher_has_platoon_splits():
 
 def test_step7_splits_contain_era():
     """Step 7: Platoon splits contain ERA."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "ERA" in p["platoon_splits"]["vs_LHB"]
         assert "ERA" in p["platoon_splits"]["vs_RHB"]
@@ -378,7 +387,7 @@ def test_step7_splits_contain_era():
 
 def test_step7_splits_contain_whip():
     """Step 7: Platoon splits contain WHIP."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "WHIP" in p["platoon_splits"]["vs_LHB"]
         assert "WHIP" in p["platoon_splits"]["vs_RHB"]
@@ -386,7 +395,7 @@ def test_step7_splits_contain_whip():
 
 def test_step7_splits_contain_woba_against():
     """Step 7: Platoon splits contain wOBA-against."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert "wOBA_against" in p["platoon_splits"]["vs_LHB"]
         assert "wOBA_against" in p["platoon_splits"]["vs_RHB"]
@@ -394,7 +403,7 @@ def test_step7_splits_contain_woba_against():
 
 def test_step7_splits_contain_k_and_bb_rate():
     """Step 7: Platoon splits contain K% and BB%."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         for side in ("vs_LHB", "vs_RHB"):
             assert "K_pct" in p["platoon_splits"][side]
@@ -407,7 +416,7 @@ def test_step7_splits_match_roster_era():
     """Step 7: Platoon split ERA values match the pitcher's roster attributes."""
     rosters = _load_rosters()
     home_bp = rosters["home"]["bullpen"]
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
 
     for bp_roster, bp_result in zip(home_bp, result["bullpen"][:len(home_bp)]):
         pitcher_attrs = bp_roster.get("pitcher", {})
@@ -447,7 +456,7 @@ def test_step7_era_to_stat_correlations():
 
 def test_step8_each_pitcher_has_warmup_state():
     """Step 8: Each pitcher includes warmup_state."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     valid_states = {"cold", "warming", "ready"}
     for p in result["bullpen"]:
         assert "warmup_state" in p
@@ -456,14 +465,14 @@ def test_step8_each_pitcher_has_warmup_state():
 
 def test_step8_default_warmup_state_is_cold():
     """Step 8: Default warmup state is cold when no warming/ready IDs provided."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     for p in result["bullpen"]:
         assert p["warmup_state"] == "cold"
 
 
 def test_step8_warming_pitcher():
     """Step 8: Pitcher in warming_pitcher_ids has warmup_state 'warming'."""
-    result = parse(get_bullpen_status("home", warming_pitcher_ids="h_bp3"))
+    result = parse_ok(get_bullpen_status("home", warming_pitcher_ids="h_bp3"))
     for p in result["bullpen"]:
         if p["player_id"] == "h_bp3":
             assert p["warmup_state"] == "warming"
@@ -473,7 +482,7 @@ def test_step8_warming_pitcher():
 
 def test_step8_ready_pitcher():
     """Step 8: Pitcher in ready_pitcher_ids has warmup_state 'ready'."""
-    result = parse(get_bullpen_status("home", ready_pitcher_ids="h_bp1"))
+    result = parse_ok(get_bullpen_status("home", ready_pitcher_ids="h_bp1"))
     for p in result["bullpen"]:
         if p["player_id"] == "h_bp1":
             assert p["warmup_state"] == "ready"
@@ -483,7 +492,7 @@ def test_step8_ready_pitcher():
 
 def test_step8_multiple_warming_and_ready():
     """Step 8: Multiple pitchers can be warming or ready simultaneously."""
-    result = parse(get_bullpen_status(
+    result = parse_ok(get_bullpen_status(
         "home",
         warming_pitcher_ids="h_bp3,h_bp4",
         ready_pitcher_ids="h_bp1,h_bp2",
@@ -498,7 +507,7 @@ def test_step8_multiple_warming_and_ready():
 
 def test_step8_ready_overrides_warming():
     """Step 8: If a pitcher is in both warming and ready, ready takes precedence."""
-    result = parse(get_bullpen_status(
+    result = parse_ok(get_bullpen_status(
         "home",
         warming_pitcher_ids="h_bp1",
         ready_pitcher_ids="h_bp1",
@@ -514,7 +523,7 @@ def test_step8_ready_overrides_warming():
 
 def test_step9_used_pitchers_excluded():
     """Step 9: Pitchers in used_pitcher_ids are excluded from results."""
-    result = parse(get_bullpen_status("home", used_pitcher_ids="h_bp1"))
+    result = parse_ok(get_bullpen_status("home", used_pitcher_ids="h_bp1"))
     ids = {p["player_id"] for p in result["bullpen"]}
     assert "h_bp1" not in ids
     assert result["bullpen_count"] == 7
@@ -522,7 +531,7 @@ def test_step9_used_pitchers_excluded():
 
 def test_step9_multiple_used_pitchers_excluded():
     """Step 9: Multiple used pitchers are all excluded."""
-    result = parse(get_bullpen_status("home", used_pitcher_ids="h_bp1,h_bp2,h_bp3"))
+    result = parse_ok(get_bullpen_status("home", used_pitcher_ids="h_bp1,h_bp2,h_bp3"))
     ids = {p["player_id"] for p in result["bullpen"]}
     assert "h_bp1" not in ids
     assert "h_bp2" not in ids
@@ -532,8 +541,8 @@ def test_step9_multiple_used_pitchers_excluded():
 
 def test_step9_available_count_updated():
     """Step 9: available_count reflects the reduced bullpen."""
-    result_full = parse(get_bullpen_status("home"))
-    result_reduced = parse(get_bullpen_status("home", used_pitcher_ids="h_bp1"))
+    result_full = parse_ok(get_bullpen_status("home"))
+    result_reduced = parse_ok(get_bullpen_status("home", used_pitcher_ids="h_bp1"))
     assert result_reduced["available_count"] <= result_full["available_count"]
     assert result_reduced["bullpen_count"] == result_full["bullpen_count"] - 1
 
@@ -541,7 +550,7 @@ def test_step9_available_count_updated():
 def test_step9_all_used_returns_empty():
     """Step 9: If all pitchers are used, bullpen is empty."""
     all_ids = ",".join(f"h_bp{i}" for i in range(1, 9))
-    result = parse(get_bullpen_status("home", used_pitcher_ids=all_ids))
+    result = parse_ok(get_bullpen_status("home", used_pitcher_ids=all_ids))
     assert result["status"] == "ok"
     assert result["bullpen_count"] == 0
     assert result["available_count"] == 0
@@ -550,13 +559,13 @@ def test_step9_all_used_returns_empty():
 
 def test_step9_unknown_used_id_ignored():
     """Step 9: Unknown IDs in used_pitcher_ids are silently ignored."""
-    result = parse(get_bullpen_status("home", used_pitcher_ids="unknown_001"))
+    result = parse_ok(get_bullpen_status("home", used_pitcher_ids="unknown_001"))
     assert result["bullpen_count"] == 8  # All pitchers still present
 
 
 def test_step9_whitespace_in_ids_handled():
     """Step 9: Whitespace around IDs in used_pitcher_ids is trimmed."""
-    result = parse(get_bullpen_status("home", used_pitcher_ids=" h_bp1 , h_bp2 "))
+    result = parse_ok(get_bullpen_status("home", used_pitcher_ids=" h_bp1 , h_bp2 "))
     ids = {p["player_id"] for p in result["bullpen"]}
     assert "h_bp1" not in ids
     assert "h_bp2" not in ids
@@ -568,7 +577,7 @@ def test_step9_whitespace_in_ids_handled():
 
 def test_integration_closer_stats():
     """Integration: Home closer (Greg Foster) has expected attributes."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     closer = next(p for p in result["bullpen"] if p["role"] == "CLOSER")
     assert closer["player_id"] == "h_bp1"
     assert closer["name"] == "Greg Foster"
@@ -581,7 +590,7 @@ def test_integration_closer_stats():
 
 def test_integration_lefty_setup():
     """Integration: Home lefty setup man (Luis Herrera) is identified."""
-    result = parse(get_bullpen_status("home"))
+    result = parse_ok(get_bullpen_status("home"))
     lefties = [p for p in result["bullpen"] if p["throws"] == "L"]
     assert len(lefties) >= 1
     herrera = next((p for p in lefties if p["name"] == "Luis Herrera"), None)
@@ -591,7 +600,7 @@ def test_integration_lefty_setup():
 
 def test_integration_away_closer():
     """Integration: Away closer (Zach Miller) has expected attributes."""
-    result = parse(get_bullpen_status("away"))
+    result = parse_ok(get_bullpen_status("away"))
     closer = next(p for p in result["bullpen"] if p["role"] == "CLOSER")
     assert closer["player_id"] == "a_bp1"
     assert closer["name"] == "Zach Miller"
@@ -601,7 +610,7 @@ def test_integration_away_closer():
 
 def test_integration_combined_parameters():
     """Integration: Using all parameters together works correctly."""
-    result = parse(get_bullpen_status(
+    result = parse_ok(get_bullpen_status(
         team="home",
         used_pitcher_ids="h_bp7,h_bp8",
         warming_pitcher_ids="h_bp3",
@@ -621,13 +630,15 @@ def test_integration_combined_parameters():
 def test_integration_response_structure():
     """Integration: Full response has expected top-level structure."""
     result = parse(get_bullpen_status("home"))
-    assert "status" in result
-    assert "team" in result
-    assert "team_name" in result
-    assert "bullpen_count" in result
-    assert "available_count" in result
-    assert "bullpen" in result
-    assert isinstance(result["bullpen"], list)
+    assert result["status"] == "ok"
+    assert result["tool"] == "get_bullpen_status"
+    data = result["data"]
+    assert "team" in data
+    assert "team_name" in data
+    assert "bullpen_count" in data
+    assert "available_count" in data
+    assert "bullpen" in data
+    assert isinstance(data["bullpen"], list)
 
 
 def test_helper_clamp():

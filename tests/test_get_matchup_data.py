@@ -27,7 +27,11 @@ from tools.get_matchup_data import get_matchup_data, _simulated_pa, _sample_size
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    """Parse JSON response. For success responses, merge data into top level for easy access."""
+    d = json.loads(result)
+    if d.get("status") == "ok" and "data" in d:
+        return {"status": "ok", "tool": d.get("tool"), **d["data"]}
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -168,15 +172,14 @@ def test_step8_no_prior_history():
     assert result["career_pa"] == 0
     assert result["sample_size_reliability"] == "none"
 
-    # matchup_stats should be None (no data to report)
-    assert result["matchup_stats"] is None
+    # matchup_stats should be unavailable with explanation (no data to report)
+    assert result["matchup_stats"]["value"] is None
+    assert "explanation" in result["matchup_stats"]
+    assert "no prior matchup" in result["matchup_stats"]["explanation"].lower()
 
-    # outcome_distribution should be None
-    assert result["outcome_distribution"] is None
-
-    # Should have a meaningful message
-    assert "no_history_message" in result
-    assert "no prior matchup" in result["no_history_message"].lower()
+    # outcome_distribution should be unavailable with explanation
+    assert result["outcome_distribution"]["value"] is None
+    assert "explanation" in result["outcome_distribution"]
 
     # Similarity model should still provide a projected wOBA
     assert "similarity_projected_wOBA" in result

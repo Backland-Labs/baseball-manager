@@ -25,7 +25,11 @@ from tools.get_win_probability import get_win_probability
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    """Parse JSON response. For success responses, merge data into top level for easy access."""
+    d = json.loads(result)
+    if d.get("status") == "ok" and "data" in d:
+        return {"status": "ok", "tool": d.get("tool"), **d["data"]}
+    return d
 
 
 # -----------------------------------------------------------------------

@@ -34,7 +34,10 @@ from tools.get_defensive_positioning import (
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    d = json.loads(result)
+    if d.get("status") == "ok" and "data" in d:
+        return {"status": "ok", "tool": d.get("tool"), **d["data"]}
+    return d
 
 
 # -----------------------------------------------------------------------

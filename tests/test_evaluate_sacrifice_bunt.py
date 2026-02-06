@@ -34,7 +34,13 @@ from tools.get_run_expectancy import RE_MATRIX, PROB_AT_LEAST_ONE, _runners_key,
 
 
 def parse(result: str) -> dict:
-    return json.loads(result)
+    """Parse JSON response. For success responses, merge data into top level for easy access."""
+    parsed = json.loads(result)
+    if parsed.get("status") == "ok" and "data" in parsed:
+        merged = {"status": "ok", "tool": parsed.get("tool")}
+        merged.update(parsed["data"])
+        return merged
+    return parsed
 
 
 # -----------------------------------------------------------------------

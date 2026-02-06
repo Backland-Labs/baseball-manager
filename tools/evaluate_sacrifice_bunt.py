@@ -15,6 +15,8 @@ from pathlib import Path
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref
+
 from tools.get_run_expectancy import (
     RE_MATRIX,
     PROB_AT_LEAST_ONE,
@@ -374,48 +376,34 @@ def evaluate_sacrifice_bunt(
         JSON string with bunt evaluation.
     """
     _load_players()
+    TOOL_NAME = "evaluate_sacrifice_bunt"
 
     # --- Validate batter_id ---
     if batter_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{batter_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID",
+            f"Player '{batter_id}' not found in any roster.")
 
     player = _PLAYERS[batter_id]
 
     # --- Validate player has batter attributes ---
     if "batter" not in player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_BATTER",
-            "message": f"Player '{batter_id}' ({player.get('name', 'unknown')}) does not have batting attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_BATTER",
+            f"Player '{batter_id}' ({player.get('name', 'unknown')}) does not have batting attributes.")
 
     # --- Validate outs ---
     if not isinstance(outs, int) or outs < 0 or outs > 2:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid outs value: {outs}. Must be 0, 1, or 2.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid outs value: {outs}. Must be 0, 1, or 2.")
 
     # --- Validate inning ---
     if not isinstance(inning, int) or inning < 1:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Invalid inning value: {inning}. Must be 1 or greater.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER",
+            f"Invalid inning value: {inning}. Must be 1 or greater.")
 
     # --- Validate there are runners on base ---
     if not runner_on_first and not runner_on_second and not runner_on_third:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_SITUATION",
-            "message": "Sacrifice bunt requires at least one runner on base.",
-        })
+        return error_response(TOOL_NAME, "INVALID_SITUATION",
+            "Sacrifice bunt requires at least one runner on base.")
 
     # --- Derive bunt proficiency ---
     bunt_proficiency = _derive_bunt_proficiency(player)
@@ -439,8 +427,7 @@ def evaluate_sacrifice_bunt(
         score_differential, inning, outs, runner_on_third,
     )
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "batter_id": batter_id,
         "batter_name": player.get("name", "Unknown"),
         "base_out_state": {

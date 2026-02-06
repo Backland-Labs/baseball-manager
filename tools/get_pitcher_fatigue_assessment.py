@@ -16,6 +16,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
+from tools.response import success_response, error_response, player_ref
+
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
 # ---------------------------------------------------------------------------
@@ -371,56 +373,33 @@ def get_pitcher_fatigue_assessment(
         batted ball quality trend, pitch count by inning, TTO wOBA, and fatigue level.
     """
     _load_players()
+    TOOL_NAME = "get_pitcher_fatigue_assessment"
 
     # --- Validate pitcher_id ---
     if pitcher_id not in _PLAYERS:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PLAYER_ID",
-            "message": f"Player '{pitcher_id}' not found in any roster.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PLAYER_ID", f"Player '{pitcher_id}' not found in any roster.")
 
     player = _PLAYERS[pitcher_id]
 
     # --- Validate pitcher has pitcher attributes ---
     if "pitcher" not in player:
-        return json.dumps({
-            "status": "error",
-            "error_code": "NOT_A_PITCHER",
-            "message": f"Player '{pitcher_id}' ({player.get('name', 'unknown')}) does not have pitching attributes.",
-        })
+        return error_response(TOOL_NAME, "NOT_A_PITCHER", f"Player '{pitcher_id}' ({player.get('name', 'unknown')}) does not have pitching attributes.")
 
     # --- Validate in_current_game ---
     if not in_current_game:
-        return json.dumps({
-            "status": "error",
-            "error_code": "PITCHER_NOT_IN_GAME",
-            "message": f"Player '{pitcher_id}' ({player.get('name', 'unknown')}) is not in the current game.",
-        })
+        return error_response(TOOL_NAME, "PITCHER_NOT_IN_GAME", f"Player '{pitcher_id}' ({player.get('name', 'unknown')}) is not in the current game.")
 
     # --- Validate pitch_count ---
     if pitch_count < 0:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Pitch count must be non-negative, got {pitch_count}.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER", f"Pitch count must be non-negative, got {pitch_count}.")
 
     # --- Validate innings_pitched ---
     if innings_pitched < 0:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Innings pitched must be non-negative, got {innings_pitched}.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER", f"Innings pitched must be non-negative, got {innings_pitched}.")
 
     # --- Validate times_through_order ---
     if times_through_order < 1:
-        return json.dumps({
-            "status": "error",
-            "error_code": "INVALID_PARAMETER",
-            "message": f"Times through order must be at least 1, got {times_through_order}.",
-        })
+        return error_response(TOOL_NAME, "INVALID_PARAMETER", f"Times through order must be at least 1, got {times_through_order}.")
 
     pitcher_attrs = player["pitcher"]
     stuff = pitcher_attrs["stuff"]
@@ -458,8 +437,7 @@ def get_pitcher_fatigue_assessment(
         pitch_count, innings_pitched, stamina, times_through_order,
     )
 
-    return json.dumps({
-        "status": "ok",
+    return success_response(TOOL_NAME, {
         "pitcher_id": pitcher_id,
         "pitcher_name": player.get("name", "Unknown"),
         "throws": player.get("throws", "R"),
