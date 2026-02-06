@@ -98,6 +98,7 @@
   {
     "category": "tool",
     "name": "evaluate_stolen_base",
+    "status": "passing",
     "description": "Evaluates a potential stolen base attempt given runner speed, pitcher hold time, catcher arm, and current base-out state. Returns success probability, breakeven rate, expected run-expectancy change, and a recommendation.",
     "steps": [
       "Accepts runner identifier, target base, pitcher identifier, and catcher identifier",
