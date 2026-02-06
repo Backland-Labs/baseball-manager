@@ -372,6 +372,10 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
     if verbose:
         print()
         print(engine.print_box_score(game))
+        decisions_summary = engine.generate_decisions_summary(game)
+        if decisions_summary and "No managerial decisions" not in decisions_summary:
+            print()
+            print(decisions_summary)
         print(f"\nAgent decisions: {total_agent_calls}")
         print(f"Decision log entries: {len(decision_log)}")
 
@@ -730,6 +734,11 @@ def run_sim(seed: int | None = None, verbose: bool = True) -> GameState:
 
     print()
     print(engine.print_box_score(game))
+
+    decisions_summary = engine.generate_decisions_summary(game)
+    if decisions_summary and "No managerial decisions" not in decisions_summary:
+        print()
+        print(decisions_summary)
 
     print(f"\nTotal plate appearances: {len([e for e in game.play_log if e.event_type not in ('inning_change', 'game_end', 'decision')])}")
     print(f"Total play events: {len(game.play_log)}")

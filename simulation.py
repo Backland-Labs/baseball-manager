@@ -245,6 +245,9 @@ class TeamState:
     # Innings scored tracking for box score
     inning_runs: list[int] = field(default_factory=list)
 
+    # Error tracking for box score
+    errors: int = 0
+
     def current_batter(self) -> SimPlayer:
         return self.lineup[self.lineup_index]
 
@@ -1249,6 +1252,10 @@ class SimulationEngine:
 
         game_state._current_inning_runs += runs_scored
 
+        # Track errors on the fielding team
+        if pa_result.get("result") == "error":
+            ft.errors += 1
+
         # Record batter runs scored
         if runs_scored > 0:
             # Mark runners who scored
@@ -1298,6 +1305,11 @@ class SimulationEngine:
         # Check for walk-off
         if (game_state.half == "BOTTOM" and game_state.inning >= 9 and
                 game_state.score_home > game_state.score_away):
+            # Record the inning runs before ending the game
+            while len(bt.inning_runs) < game_state.inning:
+                bt.inning_runs.append(0)
+            bt.inning_runs[game_state.inning - 1] = game_state._current_inning_runs
+
             game_state.game_over = True
             game_state.winning_team = game_state.home.name
             events.append(PlayEvent(
@@ -1620,6 +1632,7 @@ class SimulationEngine:
                 "inning_runs": inning_runs,
                 "total_runs": total_runs,
                 "total_hits": total_hits,
+                "total_errors": team.errors,
                 "batting": batting_lines,
                 "pitching": pitching_lines,
             }
@@ -1650,7 +1663,7 @@ class SimulationEngine:
         header = f"{'Team':<20}"
         for i in range(1, max_inn + 1):
             header += f" {i:>3}"
-        header += "  |   R   H"
+        header += "  |   R   H   E"
         lines.append(header)
         lines.append("-" * len(header))
 
@@ -1659,7 +1672,7 @@ class SimulationEngine:
             row = f"{team['team_name']:<20}"
             for r in team["inning_runs"]:
                 row += f" {r:>3}"
-            row += f"  | {team['total_runs']:>3} {team['total_hits']:>3}"
+            row += f"  | {team['total_runs']:>3} {team['total_hits']:>3} {team['total_errors']:>3}"
             lines.append(row)
 
         lines.append("")
@@ -1690,6 +1703,32 @@ class SimulationEngine:
                     f"{p['ER']:>3} {p['BB']:>3} {p['K']:>3} {p['pitches']:>4}"
                 )
 
+        return "\n".join(lines)
+
+    def generate_decisions_summary(self, game_state: GameState) -> str:
+        """Generate a summary of key managerial decisions made during the game.
+
+        Extracts decision events from the play log and formats them as a
+        readable summary for post-game review.
+        """
+        decision_events = [
+            e for e in game_state.play_log if e.event_type == "decision"
+        ]
+
+        if not decision_events:
+            return "No managerial decisions recorded."
+
+        lines = []
+        lines.append("KEY MANAGERIAL DECISIONS")
+        lines.append("-" * 40)
+
+        for i, event in enumerate(decision_events, 1):
+            half_str = "Top" if event.half == "TOP" else "Bot"
+            situation = f"{half_str} {event.inning}, {event.outs_before} out"
+            score = f"Away {event.score_away} - Home {event.score_home}"
+            lines.append(f"  {i}. [{situation}, {score}] {event.description}")
+
+        lines.append(f"\nTotal decisions: {len(decision_events)}")
         return "\n".join(lines)
 
 
@@ -2138,6 +2177,11 @@ def validate_and_apply_decision(game_state: GameState, decision: dict,
         events = [event]
         if (game_state.half == "BOTTOM" and game_state.inning >= 9 and
                 game_state.score_home > game_state.score_away):
+            # Record inning runs before ending the game
+            while len(bt.inning_runs) < game_state.inning:
+                bt.inning_runs.append(0)
+            bt.inning_runs[game_state.inning - 1] = game_state._current_inning_runs
+
             game_state.game_over = True
             game_state.winning_team = game_state.home.name
             end_event = PlayEvent(

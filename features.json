@@ -302,6 +302,7 @@
   {
     "category": "functional",
     "name": "game_completion",
+    "status": "passing",
     "description": "The game ends when a winner is determined according to MLB rules. A final summary is produced including the box score, key decisions, and game narrative.",
     "steps": [
       "The game ends after the bottom of the 9th if the home team is ahead",
