@@ -171,7 +171,7 @@
   {
     "category": "tool",
     "name": "get_run_expectancy",
-    "passing": false,
+    "passing": true,
     "description": "Returns expected runs for a given base-out state, probability of scoring at least one run, and the run distribution. Backed by the pre-computed 24-state run expectancy matrix from Retrosheet data.",
     "steps": [
       "Accepts base state (runners on 1st, 2nd, 3rd in any combination) and out count (0, 1, 2)",
