@@ -185,7 +185,7 @@
   {
     "category": "tool",
     "name": "get_win_probability",
-    "passing": false,
+    "passing": true,
     "description": "Returns win probability, leverage index, and conditional win probabilities given the full game state. Backed by pre-computed win probability tables from historical game outcomes.",
     "steps": [
       "Accepts inning, half (top/bottom), outs, base state, and score differential",
