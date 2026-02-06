@@ -36,6 +36,7 @@
   {
     "category": "tool",
     "name": "get_pitcher_stats",
+    "status": "passing",
     "description": "Retrieves pitching statistics for a pitcher, including ERA/FIP/xFIP, strikeout and walk rates, ground ball rate, pitch mix with per-pitch metrics, and times-through-order splits.",
     "steps": [
       "Accepts a player identifier and optional split parameters (vs_hand: L/R, home_away, recency_window)",
