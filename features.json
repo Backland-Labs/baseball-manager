@@ -62,7 +62,7 @@
   {
     "category": "data",
     "name": "statcast_player_stats",
-    "passing": false,
+    "passing": true,
     "description": "Integration with pybaseball to fetch real Statcast and FanGraphs player statistics. Provides season stats, splits, advanced metrics, and pitch-level data for use by the player stats tools.",
     "steps": [
       "Add pybaseball as an inline dependency in the relevant scripts",
