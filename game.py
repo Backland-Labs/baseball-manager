@@ -307,7 +307,9 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     return False
 
 
-def _call_agent(client: Anthropic, messages: list[dict],
+def _call_agent(client: Anthropic, messages: list[dict], *,
+                tools: list | None = None, model: str | None = None,
+                system: str | None = None,
                 verbose: bool = True) -> tuple[dict, object | None, dict]:
     """Send messages to the Claude agent and extract a ManagerDecision.
 
@@ -317,6 +319,9 @@ def _call_agent(client: Anthropic, messages: list[dict],
     Args:
         client: Anthropic API client.
         messages: Full conversation history including the latest user message.
+        tools: Tool list to register. Defaults to ALL_TOOLS.
+        model: Model identifier. Defaults to "claude-sonnet-4-5-20250929".
+        system: System prompt. Defaults to SYSTEM_PROMPT.
         verbose: Print agent activity.
 
     Returns:
@@ -327,6 +332,10 @@ def _call_agent(client: Anthropic, messages: list[dict],
     Raises:
         Exception: Re-raised after exhausting rate-limit retries.
     """
+    effective_tools = tools if tools is not None else ALL_TOOLS
+    effective_model = model or "claude-sonnet-4-5-20250929"
+    effective_system = system if system is not None else SYSTEM_PROMPT
+
     tool_calls: list[dict] = []
     total_input_tokens = 0
     total_output_tokens = 0
@@ -339,10 +348,10 @@ def _call_agent(client: Anthropic, messages: list[dict],
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
                 runner = client.beta.messages.tool_runner(
-                    model="claude-sonnet-4-5-20250929",
+                    model=effective_model,
                     max_tokens=4096,
-                    system=SYSTEM_PROMPT,
-                    tools=ALL_TOOLS,
+                    system=effective_system,
+                    tools=effective_tools,
                     output_format=ManagerDecision,
                     messages=messages,
                 )
