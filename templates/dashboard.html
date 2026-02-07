@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Baseball AI Manager{% endblock %}
+{% block content %}
+<div class="dashboard">
+  <section class="card">
+    <h2>Start Simulation</h2>
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    <form id="sim-form" class="sim-form">
+      <div class="form-row">
+        <label for="seed">Seed (optional)</label>
+        <input type="number" id="seed" name="seed" placeholder="Random">
+      </div>
+      <div class="form-row">
+        <label for="managed_team">Managed Team</label>
+        <select id="managed_team" name="managed_team">
+          <option value="home">Home</option>
+          <option value="away">Away</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Start Simulation</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Past Game Logs</h2>
+    <div id="logs-table-container">
+      <table class="data-table" id="logs-table">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Away</th>
+            <th>Home</th>
+            <th>Score</th>
+            <th>Decisions</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="logs-body">
+          <tr><td colspan="6" class="muted">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('sim-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const seedInput = document.getElementById('seed').value;
+  const managedTeam = document.getElementById('managed_team').value;
+  const body = { managed_team: managedTeam };
+  if (seedInput) body.seed = parseInt(seedInput);
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  try {
+    const resp = await fetch('/api/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    window.location.href = '/game/' + data.game_id;
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Start Simulation';
+    alert('Failed to start simulation: ' + err.message);
+  }
+});
+
+(async () => {
+  try {
+    const resp = await fetch('/api/logs');
+    const logs = await resp.json();
+    const tbody = document.getElementById('logs-body');
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">No game logs yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = logs.map(log => {
+      const score = log.final_score;
+      const scoreStr = score.away !== undefined
+        ? score.away + ' - ' + score.home
+        : '';
+      return `<tr>
+        <td><code>${log.filename}</code></td>
+        <td>${log.away_team}</td>
+        <td>${log.home_team}</td>
+        <td>${scoreStr}</td>
+        <td>${log.decisions_count}</td>
+        <td><a href="/logs/${log.filename}" class="btn btn-sm">View</a></td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    document.getElementById('logs-body').innerHTML =
+      '<tr><td colspan="6" class="muted">Failed to load logs</td></tr>';
+  }
+})();
+</script>
+{% endblock %}

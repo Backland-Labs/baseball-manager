@@ -1,0 +1,365 @@
+/* ---------------------------------------------------------------
+   Baseball AI Manager -- Dark Theme
+   --------------------------------------------------------------- */
+
+:root {
+  --bg: #0f1117;
+  --bg-card: #181b24;
+  --bg-hover: #1e2230;
+  --text: #e1e4eb;
+  --text-muted: #7c829a;
+  --border: #2a2e3d;
+  --accent: #4f8ff7;
+  --accent-hover: #6ba3ff;
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --radius: 8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---- Navbar ---- */
+
+.navbar {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-brand {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-links { display: flex; gap: 1rem; }
+.nav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.nav-links a:hover { color: var(--text); }
+
+/* ---- Layout ---- */
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card h2, .card h3 {
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* ---- Forms ---- */
+
+.sim-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 400px; }
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-row label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: var(--font);
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* ---- Buttons ---- */
+
+.btn {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-sm { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
+
+/* ---- Tables ---- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.data-table tbody tr:hover { background: var(--bg-hover); }
+
+/* ---- Alerts / badges ---- */
+
+.alert { padding: 0.6rem 0.8rem; border-radius: 4px; margin-bottom: 0.75rem; font-size: 0.85rem; }
+.alert-error { background: rgba(248, 113, 113, 0.12); color: var(--red); border: 1px solid rgba(248, 113, 113, 0.25); }
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
+}
+
+.muted { color: var(--text-muted); }
+code { font-family: var(--mono); font-size: 0.8em; }
+
+/* ---- Game layout ---- */
+
+.game-layout { display: flex; flex-direction: column; gap: 1rem; }
+
+.game-main {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .game-main { grid-template-columns: 1fr; }
+}
+
+/* ---- Scoreboard ---- */
+
+.scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  font-size: 0.8rem;
+  font-family: var(--mono);
+}
+
+.scoreboard-table th,
+.scoreboard-table td {
+  padding: 0.35rem 0.5rem;
+  min-width: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scoreboard-table th { color: var(--text-muted); font-weight: 500; }
+.scoreboard-table .team-col { text-align: left; min-width: 120px; }
+.scoreboard-table .team-name { text-align: left; font-weight: 600; }
+.scoreboard-table .rhe-col { font-weight: 600; }
+.scoreboard-table .rhe { font-weight: 700; color: var(--accent); }
+
+.scoreboard-table .inning-active {
+  background: var(--bg-hover);
+  border-radius: 3px;
+}
+
+/* ---- Diamond ---- */
+
+.diamond-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.diamond-container { width: 160px; height: 160px; }
+
+.diamond-svg .base {
+  fill: var(--bg);
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.diamond-svg .base.occupied {
+  fill: var(--yellow);
+  stroke: var(--yellow);
+}
+
+.game-info { width: 100%; }
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+}
+
+.info-label { color: var(--text-muted); }
+.info-value { font-weight: 500; }
+
+/* Outs dots */
+
+.outs-dots { display: flex; gap: 0.3rem; }
+
+.out-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  background: transparent;
+}
+
+.out-dot.active {
+  background: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* ---- Play-by-play feed ---- */
+
+.feed-card { max-height: 500px; display: flex; flex-direction: column; }
+.feed-card h3 { flex-shrink: 0; }
+
+.feed {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.feed-item {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.feed-item .feed-desc { font-weight: 500; }
+.feed-item .feed-detail { color: var(--text-muted); font-size: 0.75rem; }
+
+.feed-item.scoring { border-left: 3px solid var(--green); padding-left: 0.5rem; }
+
+.feed-item .feed-score {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 0.7rem;
+  margin-top: 0.15rem;
+}
+
+/* ---- Box score ---- */
+
+.box-score-card h4 { margin: 0.75rem 0 0.4rem; font-size: 0.85rem; }
+
+.box-score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-family: var(--mono);
+  margin-bottom: 0.75rem;
+}
+
+.box-score-table th,
+.box-score-table td {
+  padding: 0.25rem 0.4rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.box-score-table th { color: var(--text-muted); font-weight: 500; }
+.box-score-table td:first-child,
+.box-score-table th:first-child { text-align: left; }
+
+/* ---- Chart ---- */
+
+.chart-container { position: relative; }
+.chart-container canvas { width: 100%; height: auto; }
+
+/* ---- Log output ---- */
+
+.log-output {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ---- Log summary ---- */
+
+.log-summary { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ---- Dashboard ---- */
+
+.dashboard { display: flex; flex-direction: column; gap: 1rem; }

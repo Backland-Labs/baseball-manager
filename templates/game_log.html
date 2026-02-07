@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Game Log - Baseball AI Manager{% endblock %}
+{% block content %}
+<div class="game-log" id="game-log-root" data-filename="{{ filename }}">
+  <section class="card">
+    <h2 id="log-title">Game Log</h2>
+    <div class="log-summary" id="log-summary"></div>
+  </section>
+
+  <section class="card">
+    <h3>Win Probability</h3>
+    <div class="chart-container">
+      <canvas id="wpa-chart" width="800" height="300"></canvas>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Decisions</h3>
+    <div id="decisions-callouts"></div>
+    <table class="data-table" id="decisions-table">
+      <thead>
+        <tr>
+          <th>Turn</th>
+          <th>Inning</th>
+          <th>Situation</th>
+          <th>Decision</th>
+          <th>Active</th>
+        </tr>
+      </thead>
+      <tbody id="decisions-body">
+        <tr><td colspan="5" class="muted">Loading...</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+(async () => {
+  const filename = document.getElementById('game-log-root').dataset.filename;
+  try {
+    const resp = await fetch('/api/logs/' + filename);
+    if (!resp.ok) throw new Error('Failed to load log');
+    const data = await resp.json();
+
+    // Title
+    const info = data.game_info || {};
+    const home = info.home_team || info.home || '?';
+    const away = info.away_team || info.away || '?';
+    const score = info.final_score || {};
+    document.getElementById('log-title').textContent =
+      away + ' @ ' + home + (score.away !== undefined ? ' (' + score.away + '-' + score.home + ')' : '');
+
+    // Summary
+    const summary = data.summary || {};
+    const summaryEl = document.getElementById('log-summary');
+    summaryEl.innerHTML = `
+      <span class="badge">Decisions: ${summary.total_polls || summary.total_decisions || 0}</span>
+      <span class="badge">Active: ${summary.active_decisions || summary.active_real || 0}</span>
+    `;
+
+    // Decisions table
+    const decisions = data.decisions || data.entries || [];
+    const tbody = document.getElementById('decisions-body');
+    if (decisions.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">No decisions recorded</td></tr>';
+    } else {
+      tbody.innerHTML = decisions.map((d, i) => {
+        const gs = d.game_state || {};
+        const dec = d.decision || {};
+        const inning = gs.inning || '';
+        const half = gs.half === 'BOTTOM' ? 'Bot' : 'Top';
+        const situation = half + ' ' + inning + (gs.outs !== undefined ? ', ' + gs.outs + ' out' : '');
+        const decisionText = dec.decision || d.agent_decision_type || d.real_manager_action_type || '-';
+        const isActive = d.is_active_decision !== undefined ? d.is_active_decision : (d.real_manager_action_type !== 'NO_ACTION');
+        return `<tr>
+          <td>${d.turn || i + 1}</td>
+          <td>${inning}</td>
+          <td>${situation}</td>
+          <td>${decisionText}</td>
+          <td>${isActive ? 'Yes' : '-'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // WPA chart
+    if (decisions.length > 0) {
+      drawWPAChart('wpa-chart', decisions);
+    }
+  } catch (err) {
+    document.getElementById('log-summary').innerHTML =
+      '<div class="alert alert-error">Failed to load game log: ' + err.message + '</div>';
+  }
+})();
+</script>
+{% endblock %}

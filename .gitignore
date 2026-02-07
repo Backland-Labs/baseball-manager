@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+agent_logs/
+data/cache/
+data/game_logs/

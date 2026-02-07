@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Backtest - Baseball AI Manager{% endblock %}
+{% block content %}
+<div class="backtest">
+  <section class="card">
+    <h2>Backtest Against Historical Game</h2>
+    <form id="backtest-form" class="sim-form">
+      <div class="form-row">
+        <label for="game_pk">Game PK (MLB ID)</label>
+        <input type="number" id="game_pk" name="game_pk" required placeholder="e.g. 746865">
+      </div>
+      <div class="form-row">
+        <label for="team">Team</label>
+        <input type="text" id="team" name="team" required placeholder="e.g. CHC or Chicago Cubs">
+      </div>
+      <div class="form-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="dry_run" name="dry_run" checked>
+          Dry run (no API key needed)
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary">Run Backtest</button>
+    </form>
+    <p class="muted">Dry run extracts decision points from the game without calling the agent API. Uncheck to run the full agent comparison (requires ANTHROPIC_API_KEY).</p>
+  </section>
+
+  <section class="card" id="results-section" style="display:none">
+    <h3>Results</h3>
+    <div id="backtest-summary"></div>
+    <table class="data-table" id="backtest-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Inning</th>
+          <th>Situation</th>
+          <th>LI</th>
+          <th>Agent Decision</th>
+          <th>Real Manager</th>
+          <th>Match</th>
+        </tr>
+      </thead>
+      <tbody id="backtest-body"></tbody>
+    </table>
+  </section>
+
+  <section class="card" id="backtest-logs" style="display:none">
+    <h3>Log Output</h3>
+    <pre id="backtest-log-output" class="log-output"></pre>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('backtest-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const gamePk = document.getElementById('game_pk').value;
+  const team = document.getElementById('team').value;
+  const dryRun = document.getElementById('dry_run').checked;
+
+  // Show log section
+  const logSection = document.getElementById('backtest-logs');
+  const logOutput = document.getElementById('backtest-log-output');
+  logSection.style.display = '';
+  logOutput.textContent = 'Starting backtest for game ' + gamePk + '...\n';
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+
+  logOutput.textContent += 'Note: Backtest runs via CLI. Use:\n';
+  logOutput.textContent += '  uv run backtest.py --game-pk ' + gamePk + ' --team "' + team + '"' + (dryRun ? ' --dry-run' : '') + '\n\n';
+  logOutput.textContent += 'Checking for existing results...\n';
+
+  // Check if results already exist
+  try {
+    const resp = await fetch('/api/logs');
+    const logs = await resp.json();
+    const teamSlug = team.toLowerCase().replace(/ /g, '_');
+    const match = logs.find(l => l.filename.includes('backtest_' + gamePk));
+    if (match) {
+      logOutput.textContent += 'Found existing results: ' + match.filename + '\n';
+      window.location.href = '/logs/' + match.filename;
+      return;
+    }
+    logOutput.textContent += 'No existing results found. Run the CLI command above to generate results.\n';
+  } catch (err) {
+    logOutput.textContent += 'Error: ' + err.message + '\n';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run Backtest';
+});
+</script>
+{% endblock %}
