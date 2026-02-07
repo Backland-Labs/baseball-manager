@@ -88,13 +88,17 @@ document.getElementById('sim-form').addEventListener('submit', async (e) => {
       const scoreStr = score.away !== undefined
         ? score.away + ' - ' + score.home
         : '';
+      const viewUrl = log.is_backtest
+        ? '/backtest/results/' + log.filename
+        : '/logs/' + log.filename;
+      const typeLabel = log.is_backtest ? ' <span class="badge">Backtest</span>' : '';
       return `<tr>
-        <td><code>${log.filename}</code></td>
+        <td><code>${log.filename}</code>${typeLabel}</td>
         <td>${log.away_team}</td>
         <td>${log.home_team}</td>
         <td>${scoreStr}</td>
         <td>${log.decisions_count}</td>
-        <td><a href="/logs/${log.filename}" class="btn btn-sm">View</a></td>
+        <td><a href="${viewUrl}" class="btn btn-sm">View</a></td>
       </tr>`;
     }).join('');
   } catch (err) {

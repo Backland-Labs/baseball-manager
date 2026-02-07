@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}Backtest Results - Baseball AI Manager{% endblock %}
+{% block content %}
+<div class="backtest-results" id="bt-root" data-filename="{{ filename }}">
+
+  <!-- Header -->
+  <section class="card">
+    <h2 id="bt-title">Backtest Results</h2>
+    <div class="bt-summary" id="bt-summary"></div>
+  </section>
+
+  <!-- Filters -->
+  <section class="card bt-filters">
+    <div class="filter-row">
+      <label class="filter-label">Show:</label>
+      <button class="btn btn-sm filter-btn active" data-filter="all">All Decisions</button>
+      <button class="btn btn-sm filter-btn" data-filter="active">Active Only</button>
+      <button class="btn btn-sm filter-btn" data-filter="disagree">Disagreements</button>
+      <button class="btn btn-sm filter-btn" data-filter="high-li">High Leverage</button>
+    </div>
+  </section>
+
+  <!-- Comparison Table -->
+  <section class="card">
+    <h3>Decision Comparison</h3>
+    <div class="bt-table-wrap">
+      <table class="data-table bt-comparison-table" id="bt-table">
+        <thead>
+          <tr>
+            <th class="col-expand"></th>
+            <th class="col-num">#</th>
+            <th>Inning</th>
+            <th>Situation</th>
+            <th class="col-li">LI</th>
+            <th>Real Manager</th>
+            <th>AI Agent</th>
+            <th class="col-match">Match</th>
+          </tr>
+        </thead>
+        <tbody id="bt-body">
+          <tr><td colspan="8" class="muted">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  const filename = document.getElementById('bt-root').dataset.filename;
+
+  let data;
+  try {
+    const resp = await fetch('/api/logs/' + encodeURIComponent(filename));
+    if (!resp.ok) throw new Error('Failed to load results');
+    data = await resp.json();
+  } catch (err) {
+    document.getElementById('bt-summary').innerHTML =
+      '<div class="alert alert-error">Failed to load: ' + err.message + '</div>';
+    return;
+  }
+
+  const info = data.game_info || {};
+  const summary = data.summary || {};
+  const entries = data.entries || [];
+  const isDryRun = summary.dry_run === true || entries.every(e => !e.agent_decision_type);
+
+  // Title
+  document.getElementById('bt-title').textContent =
+    (info.away || '?') + ' @ ' + (info.home || '?') +
+    (info.away_score !== undefined ? ' (' + info.away_score + '-' + info.home_score + ')' : '') +
+    ' - ' + (info.date || '') +
+    (isDryRun ? ' [Dry Run]' : '');
+
+  // Summary badges
+  const summaryEl = document.getElementById('bt-summary');
+  const total = summary.total_decisions || entries.length;
+  const activeReal = summary.active_real || 0;
+
+  let badges = [
+    '<span class="badge">Decisions: ' + total + '</span>',
+    '<span class="badge">Manager Actions: ' + activeReal + '</span>',
+  ];
+
+  if (!isDryRun) {
+    const activeAgent = summary.active_agent || 0;
+    const catMatches = summary.category_matches || 0;
+    const pct = total > 0 ? Math.round(100 * catMatches / total) : 0;
+    badges.push('<span class="badge">AI Actions: ' + activeAgent + '</span>');
+    badges.push('<span class="badge badge-' + (pct >= 70 ? 'green' : pct >= 40 ? 'yellow' : 'red') + '">Agreement: ' + pct + '%</span>');
+    if (summary.total_input_tokens) {
+      const totalTokens = (summary.total_input_tokens || 0) + (summary.total_output_tokens || 0);
+      badges.push('<span class="badge">Tokens: ' + totalTokens.toLocaleString() + '</span>');
+    }
+  }
+
+  badges.push('<span class="badge">Managing: ' + (info.managed_side || '?') + '</span>');
+  summaryEl.innerHTML = badges.join('');
+
+  // Render table
+  const tbody = document.getElementById('bt-body');
+
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No decision points found</td></tr>';
+    return;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatToolCalls(toolCalls) {
+    if (!toolCalls || toolCalls.length === 0) return '<span class="muted">No tool calls</span>';
+
+    return toolCalls.map((tc, i) => {
+      const name = tc.name || tc.tool_name || 'unknown';
+      const input = tc.input || tc.arguments || tc.tool_input || {};
+      const output = tc.output || tc.result || tc.tool_output || null;
+
+      let html = '<div class="tool-call">';
+      html += '<div class="tool-call-header">';
+      html += '<span class="tool-call-name">' + escapeHtml(name) + '</span>';
+      html += '<span class="tool-call-num">#' + (i + 1) + '</span>';
+      html += '</div>';
+
+      // Input
+      html += '<div class="tool-call-section">';
+      html += '<div class="tool-call-label">Input</div>';
+      html += '<pre class="tool-call-code">' + escapeHtml(JSON.stringify(input, null, 2)) + '</pre>';
+      html += '</div>';
+
+      // Output (if available)
+      if (output !== null && output !== undefined) {
+        let outputStr;
+        if (typeof output === 'string') {
+          try {
+            outputStr = JSON.stringify(JSON.parse(output), null, 2);
+          } catch {
+            outputStr = output;
+          }
+        } else {
+          outputStr = JSON.stringify(output, null, 2);
+        }
+        // Truncate long outputs
+        if (outputStr.length > 1000) {
+          outputStr = outputStr.substring(0, 1000) + '\n... (truncated)';
+        }
+        html += '<div class="tool-call-section">';
+        html += '<div class="tool-call-label">Output</div>';
+        html += '<pre class="tool-call-code">' + escapeHtml(outputStr) + '</pre>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }).join('');
+  }
+
+  function liClass(li) {
+    if (li >= 2.0) return 'li-critical';
+    if (li >= 1.5) return 'li-high';
+    if (li >= 1.0) return 'li-medium';
+    return '';
+  }
+
+  function matchBadge(entry) {
+    if (isDryRun) return '<span class="match-badge match-na">--</span>';
+    if (entry.action_match) return '<span class="match-badge match-exact">Exact</span>';
+    if (entry.category_match) return '<span class="match-badge match-category">Category</span>';
+    return '<span class="match-badge match-disagree">Disagree</span>';
+  }
+
+  function decisionLabel(type, details) {
+    if (!type || type === 'NO_ACTION') return '<span class="decision-no-action">No Action</span>';
+    let html = '<span class="decision-active">' + escapeHtml(type) + '</span>';
+    if (details) {
+      const short = details.length > 50 ? details.substring(0, 50) + '...' : details;
+      html += '<div class="decision-details">' + escapeHtml(short) + '</div>';
+    }
+    return html;
+  }
+
+  let rows = '';
+  entries.forEach((entry, i) => {
+    const halfStr = entry.half === 'TOP' ? 'Top' : 'Bot';
+    const situation = entry.batter_name + ' vs ' + entry.pitcher_name +
+      ', ' + entry.outs + ' out' +
+      ' (' + entry.score_away + '-' + entry.score_home + ')';
+    const li = entry.leverage_index || 0;
+    const isActive = entry.real_manager_action_type !== 'NO_ACTION' ||
+                     (entry.agent_decision_type && entry.agent_decision_type !== 'NO_ACTION');
+    const isDisagree = !isDryRun && !entry.category_match;
+    const isHighLi = li >= 1.5;
+    const hasDetails = (!isDryRun && entry.agent_decision_type) ||
+                       entry.tool_calls?.length > 0 ||
+                       entry.agent_reasoning ||
+                       entry.real_manager_action_details;
+
+    // Data attributes for filtering
+    let filterClasses = [];
+    if (isActive) filterClasses.push('is-active');
+    if (isDisagree) filterClasses.push('is-disagree');
+    if (isHighLi) filterClasses.push('is-high-li');
+
+    rows += '<tr class="bt-row ' + filterClasses.join(' ') + '" data-index="' + i + '"' +
+            (hasDetails ? ' style="cursor:pointer"' : '') + '>';
+    rows += '<td class="col-expand">' + (hasDetails ? '<span class="expand-icon">&#9654;</span>' : '') + '</td>';
+    rows += '<td class="col-num">' + (i + 1) + '</td>';
+    rows += '<td>' + halfStr + ' ' + entry.inning + '</td>';
+    rows += '<td class="col-situation">' + escapeHtml(situation) + '</td>';
+    rows += '<td class="col-li ' + liClass(li) + '">' + li.toFixed(2) + '</td>';
+    rows += '<td>' + decisionLabel(entry.real_manager_action_type, entry.real_manager_action_details) + '</td>';
+    rows += '<td>' + (isDryRun
+      ? '<span class="muted">--</span>'
+      : decisionLabel(entry.agent_decision_type, entry.agent_action_details)) + '</td>';
+    rows += '<td class="col-match">' + matchBadge(entry) + '</td>';
+    rows += '</tr>';
+
+    // Expandable detail row
+    if (hasDetails) {
+      rows += '<tr class="bt-detail-row" data-index="' + i + '" style="display:none">';
+      rows += '<td colspan="8">';
+      rows += '<div class="bt-detail">';
+
+      // Two-column layout: agent vs manager
+      rows += '<div class="bt-detail-columns">';
+
+      // Manager column
+      rows += '<div class="bt-detail-col">';
+      rows += '<h4>Real Manager</h4>';
+      rows += '<div class="detail-field">';
+      rows += '<div class="detail-label">Decision</div>';
+      rows += '<div class="detail-value">' + escapeHtml(entry.real_manager_action_type || 'NO_ACTION') + '</div>';
+      rows += '</div>';
+      if (entry.real_manager_action_details) {
+        rows += '<div class="detail-field">';
+        rows += '<div class="detail-label">Details</div>';
+        rows += '<div class="detail-value">' + escapeHtml(entry.real_manager_action_details) + '</div>';
+        rows += '</div>';
+      }
+      if (entry.real_outcome) {
+        rows += '<div class="detail-field">';
+        rows += '<div class="detail-label">Outcome</div>';
+        rows += '<div class="detail-value">' + escapeHtml(entry.real_outcome) + '</div>';
+        rows += '</div>';
+      }
+      rows += '</div>';
+
+      // Agent column
+      if (!isDryRun && entry.agent_decision_type) {
+        rows += '<div class="bt-detail-col">';
+        rows += '<h4>AI Agent</h4>';
+        rows += '<div class="detail-field">';
+        rows += '<div class="detail-label">Decision</div>';
+        rows += '<div class="detail-value">' + escapeHtml(entry.agent_decision_type || 'NO_ACTION') + '</div>';
+        rows += '</div>';
+        if (entry.agent_action_details) {
+          rows += '<div class="detail-field">';
+          rows += '<div class="detail-label">Details</div>';
+          rows += '<div class="detail-value">' + escapeHtml(entry.agent_action_details) + '</div>';
+          rows += '</div>';
+        }
+        if (entry.agent_reasoning) {
+          rows += '<div class="detail-field">';
+          rows += '<div class="detail-label">Reasoning</div>';
+          rows += '<div class="detail-value bt-reasoning">' + escapeHtml(entry.agent_reasoning) + '</div>';
+          rows += '</div>';
+        }
+        if (entry.agent_confidence) {
+          rows += '<div class="detail-field">';
+          rows += '<div class="detail-label">Confidence</div>';
+          rows += '<div class="detail-value">' + (entry.agent_confidence * 100).toFixed(0) + '%</div>';
+          rows += '</div>';
+        }
+        rows += '</div>';
+      }
+
+      rows += '</div>'; // bt-detail-columns
+
+      // Tool calls section (full width)
+      if (entry.tool_calls && entry.tool_calls.length > 0) {
+        rows += '<div class="bt-tool-calls">';
+        rows += '<h4>Tool Calls (' + entry.tool_calls.length + ')</h4>';
+        rows += formatToolCalls(entry.tool_calls);
+        rows += '</div>';
+      }
+
+      // Disagreement note
+      if (!isDryRun && entry.disagreement_type) {
+        rows += '<div class="bt-disagreement-note">';
+        rows += 'Disagreement: ' + escapeHtml(entry.disagreement_type);
+        rows += '</div>';
+      }
+
+      rows += '</div>'; // bt-detail
+      rows += '</td></tr>';
+    }
+  });
+
+  tbody.innerHTML = rows;
+
+  // Toggle detail rows on click
+  document.querySelectorAll('.bt-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = row.dataset.index;
+      const detail = document.querySelector('.bt-detail-row[data-index="' + idx + '"]');
+      if (!detail) return;
+
+      const icon = row.querySelector('.expand-icon');
+      if (detail.style.display === 'none') {
+        detail.style.display = '';
+        if (icon) icon.innerHTML = '&#9660;';
+        row.classList.add('bt-row-expanded');
+      } else {
+        detail.style.display = 'none';
+        if (icon) icon.innerHTML = '&#9654;';
+        row.classList.remove('bt-row-expanded');
+      }
+    });
+  });
+
+  // Filter buttons
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const filter = btn.dataset.filter;
+      document.querySelectorAll('.bt-row').forEach(row => {
+        let show = true;
+        if (filter === 'active') show = row.classList.contains('is-active');
+        else if (filter === 'disagree') show = row.classList.contains('is-disagree');
+        else if (filter === 'high-li') show = row.classList.contains('is-high-li');
+
+        row.style.display = show ? '' : 'none';
+        // Also hide associated detail row
+        const idx = row.dataset.index;
+        const detail = document.querySelector('.bt-detail-row[data-index="' + idx + '"]');
+        if (detail && !show) detail.style.display = 'none';
+      });
+    });
+  });
+
+})();
+</script>
+{% endblock %}

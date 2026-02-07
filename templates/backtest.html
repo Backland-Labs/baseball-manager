@@ -16,80 +16,145 @@
       <div class="form-row">
         <label class="checkbox-label">
           <input type="checkbox" id="dry_run" name="dry_run" checked>
-          Dry run (no API key needed)
+          Dry run (extract decisions only, no agent API calls)
         </label>
       </div>
-      <button type="submit" class="btn btn-primary">Run Backtest</button>
+      <button type="submit" class="btn btn-primary" id="run-btn">Run Backtest</button>
     </form>
-    <p class="muted">Dry run extracts decision points from the game without calling the agent API. Uncheck to run the full agent comparison (requires ANTHROPIC_API_KEY).</p>
+    <p class="muted">Dry run extracts decision points from the game to see what the real manager did. Uncheck to also run the AI agent for comparison (requires ANTHROPIC_API_KEY).</p>
   </section>
 
-  <section class="card" id="results-section" style="display:none">
-    <h3>Results</h3>
-    <div id="backtest-summary"></div>
-    <table class="data-table" id="backtest-table">
+  <section class="card" id="progress-section" style="display:none">
+    <h3>Progress</h3>
+    <div id="progress-messages" class="log-output"></div>
+  </section>
+
+  <section class="card" id="existing-results">
+    <h3>Past Backtest Results</h3>
+    <table class="data-table" id="results-table">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Inning</th>
-          <th>Situation</th>
-          <th>LI</th>
-          <th>Agent Decision</th>
-          <th>Real Manager</th>
-          <th>Match</th>
+          <th>Game</th>
+          <th>Teams</th>
+          <th>Score</th>
+          <th>Decisions</th>
+          <th>Agreement</th>
+          <th></th>
         </tr>
       </thead>
-      <tbody id="backtest-body"></tbody>
+      <tbody id="results-body">
+        <tr><td colspan="6" class="muted">Loading...</td></tr>
+      </tbody>
     </table>
-  </section>
-
-  <section class="card" id="backtest-logs" style="display:none">
-    <h3>Log Output</h3>
-    <pre id="backtest-log-output" class="log-output"></pre>
   </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.getElementById('backtest-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const gamePk = document.getElementById('game_pk').value;
-  const team = document.getElementById('team').value;
-  const dryRun = document.getElementById('dry_run').checked;
-
-  // Show log section
-  const logSection = document.getElementById('backtest-logs');
-  const logOutput = document.getElementById('backtest-log-output');
-  logSection.style.display = '';
-  logOutput.textContent = 'Starting backtest for game ' + gamePk + '...\n';
-
-  const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-
-  logOutput.textContent += 'Note: Backtest runs via CLI. Use:\n';
-  logOutput.textContent += '  uv run backtest.py --game-pk ' + gamePk + ' --team "' + team + '"' + (dryRun ? ' --dry-run' : '') + '\n\n';
-  logOutput.textContent += 'Checking for existing results...\n';
-
-  // Check if results already exist
+// Load existing backtest results
+(async () => {
   try {
     const resp = await fetch('/api/logs');
     const logs = await resp.json();
-    const teamSlug = team.toLowerCase().replace(/ /g, '_');
-    const match = logs.find(l => l.filename.includes('backtest_' + gamePk));
-    if (match) {
-      logOutput.textContent += 'Found existing results: ' + match.filename + '\n';
-      window.location.href = '/logs/' + match.filename;
+    const backtests = logs.filter(l => l.filename.startsWith('backtest_'));
+    const tbody = document.getElementById('results-body');
+
+    if (backtests.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">No backtest results yet. Run one above.</td></tr>';
       return;
     }
-    logOutput.textContent += 'No existing results found. Run the CLI command above to generate results.\n';
-  } catch (err) {
-    logOutput.textContent += 'Error: ' + err.message + '\n';
-  }
 
-  btn.disabled = false;
-  btn.textContent = 'Run Backtest';
+    tbody.innerHTML = backtests.map(bt => {
+      const score = bt.final_score || {};
+      const scoreStr = score.away !== undefined
+        ? score.away + '-' + score.home
+        : '-';
+      return `<tr>
+        <td>${bt.filename.replace('backtest_', '').replace('.json', '')}</td>
+        <td>${bt.away_team || '?'} @ ${bt.home_team || '?'}</td>
+        <td>${scoreStr}</td>
+        <td>${bt.decisions_count || '-'}</td>
+        <td>-</td>
+        <td><a href="/backtest/results/${bt.filename}" class="btn btn-sm">View</a></td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    document.getElementById('results-body').innerHTML =
+      '<tr><td colspan="6" class="muted">Failed to load results</td></tr>';
+  }
+})();
+
+// Form submission
+document.getElementById('backtest-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const gamePk = document.getElementById('game_pk').value;
+  const team = document.getElementById('team').value;
+  const dryRun = document.getElementById('dry_run').checked;
+  const btn = document.getElementById('run-btn');
+  const progressSection = document.getElementById('progress-section');
+  const progressMessages = document.getElementById('progress-messages');
+
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  progressSection.style.display = '';
+  progressMessages.textContent = '';
+
+  try {
+    // Start the backtest
+    const resp = await fetch('/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game_pk: parseInt(gamePk), team, dry_run: dryRun }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || 'Failed to start backtest');
+    }
+
+    const { backtest_id } = await resp.json();
+    progressMessages.textContent += 'Backtest started (id: ' + backtest_id + ')\n';
+
+    // Listen for progress events
+    const es = new EventSource('/api/backtest/' + backtest_id + '/events');
+
+    es.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      progressMessages.textContent += data.message + '\n';
+      progressMessages.scrollTop = progressMessages.scrollHeight;
+    });
+
+    es.addEventListener('complete', (e) => {
+      const data = JSON.parse(e.data);
+      progressMessages.textContent += 'Complete! Redirecting to results...\n';
+      es.close();
+      window.location.href = '/backtest/results/' + data.filename;
+    });
+
+    es.addEventListener('error', (e) => {
+      // SSE error event
+      if (e.data) {
+        const data = JSON.parse(e.data);
+        progressMessages.textContent += 'Error: ' + data.message + '\n';
+      }
+      es.close();
+      btn.disabled = false;
+      btn.textContent = 'Run Backtest';
+    });
+
+    es.onerror = () => {
+      es.close();
+      btn.disabled = false;
+      btn.textContent = 'Run Backtest';
+    };
+
+  } catch (err) {
+    progressMessages.textContent += 'Error: ' + err.message + '\n';
+    btn.disabled = false;
+    btn.textContent = 'Run Backtest';
+  }
 });
 </script>
 {% endblock %}
