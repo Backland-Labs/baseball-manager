@@ -307,7 +307,9 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     return False
 
 
-def _call_agent(client: Anthropic, messages: list[dict],
+def _call_agent(client: Anthropic, messages: list[dict], *,
+                tools: list | None = None, model: str | None = None,
+                system: str | None = None,
                 verbose: bool = True) -> tuple[dict, object | None, dict]:
     """Send messages to the Claude agent and extract a ManagerDecision.
 
@@ -317,6 +319,9 @@ def _call_agent(client: Anthropic, messages: list[dict],
     Args:
         client: Anthropic API client.
         messages: Full conversation history including the latest user message.
+        tools: Tool list to register. Defaults to ALL_TOOLS.
+        model: Model identifier. Defaults to "claude-sonnet-4-5-20250929".
+        system: System prompt. Defaults to SYSTEM_PROMPT.
         verbose: Print agent activity.
 
     Returns:
@@ -327,6 +332,10 @@ def _call_agent(client: Anthropic, messages: list[dict],
     Raises:
         Exception: Re-raised after exhausting rate-limit retries.
     """
+    effective_tools = tools if tools is not None else ALL_TOOLS
+    effective_model = model or "claude-sonnet-4-5-20250929"
+    effective_system = system if system is not None else SYSTEM_PROMPT
+
     tool_calls: list[dict] = []
     total_input_tokens = 0
     total_output_tokens = 0
@@ -339,10 +348,10 @@ def _call_agent(client: Anthropic, messages: list[dict],
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", message=".*output_format.*deprecated.*")
                 runner = client.beta.messages.tool_runner(
-                    model="claude-sonnet-4-5-20250929",
+                    model=effective_model,
                     max_tokens=4096,
-                    system=SYSTEM_PROMPT,
-                    tools=ALL_TOOLS,
+                    system=effective_system,
+                    tools=effective_tools,
                     output_format=ManagerDecision,
                     messages=messages,
                 )
@@ -402,17 +411,34 @@ def _call_agent(client: Anthropic, messages: list[dict],
         if verbose:
             print(f"    [Decision] {decision.decision}: {decision.action_details}")
     else:
-        # Fallback: no structured output
-        if verbose:
-            print("    [Decision] No structured output received, defaulting to NO_ACTION")
-        decision_dict = {
-            "decision": "NO_ACTION",
-            "action_details": "No valid decision received, proceeding with default",
-            "confidence": 0.0,
-            "reasoning": "Agent did not return structured output",
-            "key_factors": [],
-            "risks": [],
-        }
+        # Fallback: try to parse JSON from text blocks (tool_runner sometimes
+        # returns structured-output JSON as plain text instead of populating
+        # the .parsed attribute).
+        parsed_from_text = False
+        if final_message:
+            for block in final_message.content:
+                if block.type == "text" and block.text.strip():
+                    try:
+                        raw = json.loads(block.text.strip())
+                        decision = ManagerDecision.model_validate(raw)
+                        decision_dict = decision.model_dump()
+                        parsed_from_text = True
+                        if verbose:
+                            print(f"    [Decision] {decision.decision}: {decision.action_details}")
+                        break
+                    except (json.JSONDecodeError, Exception):
+                        continue
+        if not parsed_from_text:
+            if verbose:
+                print("    [Decision] No structured output received, defaulting to NO_ACTION")
+            decision_dict = {
+                "decision": "NO_ACTION",
+                "action_details": "No valid decision received, proceeding with default",
+                "confidence": 0.0,
+                "reasoning": "Agent did not return structured output",
+                "key_factors": [],
+                "risks": [],
+            }
 
     call_metadata = {
         "tool_calls": tool_calls,
@@ -1339,8 +1365,21 @@ def run_single_turn() -> None:
 
     print("-" * 72)
 
+    decision = None
     if final_message and hasattr(final_message, "parsed") and final_message.parsed:
-        decision: ManagerDecision = final_message.parsed
+        decision = final_message.parsed
+    elif final_message:
+        # Fallback: parse JSON from text blocks
+        for block in final_message.content:
+            if block.type == "text" and block.text.strip():
+                try:
+                    raw = json.loads(block.text.strip())
+                    decision = ManagerDecision.model_validate(raw)
+                    break
+                except (json.JSONDecodeError, Exception):
+                    continue
+
+    if decision:
         print("\nMANAGER DECISION:")
         print(f"  Decision:    {decision.decision}")
         print(f"  Details:     {decision.action_details}")

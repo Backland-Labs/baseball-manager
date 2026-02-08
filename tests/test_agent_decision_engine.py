@@ -341,10 +341,10 @@ class TestStep3SendToClaudeWithTools:
         assert "client.beta.messages.tool_runner" in source
 
     def test_call_agent_passes_all_tools(self):
-        """_call_agent must pass ALL_TOOLS to the SDK."""
+        """_call_agent must default to ALL_TOOLS for the SDK."""
         from game import _call_agent
         source = inspect.getsource(_call_agent)
-        assert "tools=ALL_TOOLS" in source
+        assert "ALL_TOOLS" in source
 
     def test_all_tools_count(self):
         """ALL_TOOLS should contain exactly 12 tools."""
@@ -352,10 +352,10 @@ class TestStep3SendToClaudeWithTools:
         assert len(ALL_TOOLS) == 12
 
     def test_call_agent_passes_system_prompt(self):
-        """_call_agent must pass the SYSTEM_PROMPT."""
+        """_call_agent must default to SYSTEM_PROMPT."""
         from game import _call_agent
         source = inspect.getsource(_call_agent)
-        assert "system=SYSTEM_PROMPT" in source
+        assert "SYSTEM_PROMPT" in source
 
     def test_call_agent_specifies_model(self):
         """_call_agent must specify a Claude model."""

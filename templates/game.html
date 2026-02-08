@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Game {{ game_id }} - Baseball AI Manager{% endblock %}
+{% block content %}
+<div class="game-layout" id="game-root" data-game-id="{{ game_id }}">
+  <!-- Scoreboard -->
+  <section class="card scoreboard-card">
+    <div class="scoreboard">
+      <table class="scoreboard-table">
+        <thead>
+          <tr>
+            <th class="team-col">Team</th>
+            <th id="inn-1">1</th><th id="inn-2">2</th><th id="inn-3">3</th>
+            <th id="inn-4">4</th><th id="inn-5">5</th><th id="inn-6">6</th>
+            <th id="inn-7">7</th><th id="inn-8">8</th><th id="inn-9">9</th>
+            <th class="rhe-col">R</th><th class="rhe-col">H</th><th class="rhe-col">E</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="away-row">
+            <td class="team-name" id="away-name">Away</td>
+            <td id="away-1">-</td><td id="away-2">-</td><td id="away-3">-</td>
+            <td id="away-4">-</td><td id="away-5">-</td><td id="away-6">-</td>
+            <td id="away-7">-</td><td id="away-8">-</td><td id="away-9">-</td>
+            <td class="rhe" id="away-R">0</td><td class="rhe" id="away-H">0</td><td class="rhe" id="away-E">0</td>
+          </tr>
+          <tr id="home-row">
+            <td class="team-name" id="home-name">Home</td>
+            <td id="home-1">-</td><td id="home-2">-</td><td id="home-3">-</td>
+            <td id="home-4">-</td><td id="home-5">-</td><td id="home-6">-</td>
+            <td id="home-7">-</td><td id="home-8">-</td><td id="home-9">-</td>
+            <td class="rhe" id="home-R">0</td><td class="rhe" id="home-H">0</td><td class="rhe" id="home-E">0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="game-main">
+    <!-- Diamond and game info -->
+    <section class="card diamond-card">
+      <div class="diamond-container">
+        <svg viewBox="0 0 200 200" class="diamond-svg">
+          <!-- Infield diamond -->
+          <polygon points="100,30 170,100 100,170 30,100" fill="none" stroke="var(--border)" stroke-width="2"/>
+          <!-- Bases -->
+          <rect id="base-2" x="92" y="22" width="16" height="16" rx="2" transform="rotate(45 100 30)" class="base"/>
+          <rect id="base-1" x="162" y="92" width="16" height="16" rx="2" transform="rotate(45 170 100)" class="base"/>
+          <rect id="base-3" x="22" y="92" width="16" height="16" rx="2" transform="rotate(45 30 100)" class="base"/>
+          <!-- Home plate -->
+          <polygon points="100,164 94,170 100,178 106,170" fill="var(--border)" stroke="var(--border)"/>
+        </svg>
+      </div>
+      <div class="game-info">
+        <div class="info-row">
+          <span class="info-label">Inning</span>
+          <span class="info-value" id="inning-display">Top 1</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Outs</span>
+          <span class="outs-dots" id="outs-display">
+            <span class="out-dot"></span>
+            <span class="out-dot"></span>
+            <span class="out-dot"></span>
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Pitcher</span>
+          <span class="info-value" id="pitcher-display">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Batter</span>
+          <span class="info-value" id="batter-display">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Win Prob</span>
+          <span class="info-value" id="wp-display">50%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Play-by-play feed -->
+    <section class="card feed-card">
+      <h3>Play-by-Play</h3>
+      <div class="feed" id="play-feed">
+        <div class="feed-item muted">Waiting for game to start...</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Box score (shown on completion) -->
+  <section class="card box-score-card" id="box-score-section" style="display:none">
+    <h3>Box Score</h3>
+    <div id="box-score-content"></div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+{% endblock %}

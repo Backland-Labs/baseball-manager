@@ -162,8 +162,9 @@ def lookup_li(
 # ---------------------------------------------------------------------------
 
 NO_ACTION_TYPES = frozenset({
-    "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
-    "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "LET_BATTER_HIT",
+    "NO_CHANGE", "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    "KEEP_CURRENT",
 })
 
 
