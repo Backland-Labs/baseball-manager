@@ -55,6 +55,11 @@ def main() -> int:
         "--quiet", action="store_true",
         help="Suppress progress output.",
     )
+    parser.add_argument(
+        "--sample", type=int, default=None, metavar="N",
+        help="Sample N decision points instead of running all. "
+             "Always includes real manager actions plus random NO_ACTION picks.",
+    )
     args = parser.parse_args()
 
     verbose = args.verbose and not args.quiet
@@ -115,6 +120,7 @@ def main() -> int:
             args.game_pk, args.team,
             dry_run=args.dry_run,
             verbose=verbose,
+            sample=args.sample,
         )
     except Exception as e:
         print(f"Error during backtest: {e}", file=sys.stderr)

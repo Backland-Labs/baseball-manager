@@ -375,6 +375,7 @@ def run_backtest(
     *,
     dry_run: bool = False,
     verbose: bool = True,
+    sample: int | None = None,
 ) -> list[ComparisonEntry]:
     """Run a full backtest on a completed game.
 
@@ -383,6 +384,8 @@ def run_backtest(
         team: Team name, abbreviation, or "home"/"away".
         dry_run: If True, extract decision points only without calling the agent.
         verbose: Print progress.
+        sample: If set, run only N decision points (always includes real
+                manager actions, fills remaining slots with highest-LI picks).
 
     Returns:
         List of ComparisonEntry objects.
@@ -419,6 +422,23 @@ def run_backtest(
     if verbose:
         active_actions = sum(1 for dp in decision_points if dp.real_manager_action is not None)
         print(f"Found {len(decision_points)} decision points ({active_actions} with manager actions)")
+
+    # Sample decision points if requested
+    if sample is not None and not dry_run and sample < len(decision_points):
+        import random
+        # Always include real manager actions
+        must_include = [dp for dp in decision_points if dp.real_manager_action is not None]
+        rest = [dp for dp in decision_points if dp.real_manager_action is None]
+        # Fill remaining slots with highest-leverage picks
+        rest.sort(key=lambda dp: dp.leverage_index, reverse=True)
+        remaining_slots = max(0, sample - len(must_include))
+        sampled = must_include + rest[:remaining_slots]
+        # Re-sort by play_index to preserve game order
+        sampled.sort(key=lambda dp: dp.play_index)
+        if verbose:
+            print(f"Sampled {len(sampled)} of {len(decision_points)} decision points "
+                  f"({len(must_include)} manager actions + {remaining_slots} highest-LI)")
+        decision_points = sampled
 
     if dry_run:
         # Print summary and return empty
