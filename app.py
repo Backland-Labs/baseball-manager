@@ -322,6 +322,30 @@ def api_get_log(filename: str):
 
 
 # ---------------------------------------------------------------------------
+# Settings API
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return jsonify({
+        "has_api_key": bool(key),
+        "api_key_preview": key[:8] + "..." if len(key) > 8 else "",
+    })
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_set_settings():
+    data = request.get_json(silent=True) or {}
+    api_key = data.get("api_key", "").strip()
+    if not api_key:
+        return jsonify({"error": "api_key is required"}), 400
+    os.environ["ANTHROPIC_API_KEY"] = api_key
+    return jsonify({"ok": True, "api_key_preview": api_key[:8] + "..."})
+
+
+# ---------------------------------------------------------------------------
 # Backtest API
 # ---------------------------------------------------------------------------
 

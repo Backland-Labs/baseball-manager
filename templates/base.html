@@ -14,11 +14,107 @@
       <a href="/">Dashboard</a>
       <a href="/backtest">Backtest</a>
     </div>
+    <div class="nav-right">
+      <button id="settings-btn" class="btn btn-sm settings-btn" title="Settings">
+        <span id="api-key-dot" class="status-dot status-dot--off"></span>
+        API Key
+      </button>
+    </div>
   </nav>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button id="settings-close" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label for="api-key-input">Anthropic API Key</label>
+          <input type="password" id="api-key-input" placeholder="sk-ant-...">
+          <p class="form-hint" id="api-key-status"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="api-key-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
   <main class="container">
     {% block content %}{% endblock %}
   </main>
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+  <script>
+  // --- Settings modal ---
+  (function() {
+    const btn = document.getElementById('settings-btn');
+    const modal = document.getElementById('settings-modal');
+    const closeBtn = document.getElementById('settings-close');
+    const saveBtn = document.getElementById('api-key-save');
+    const input = document.getElementById('api-key-input');
+    const status = document.getElementById('api-key-status');
+    const dot = document.getElementById('api-key-dot');
+
+    function openModal() { modal.style.display = 'flex'; input.focus(); }
+    function closeModal() { modal.style.display = 'none'; }
+
+    btn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
+    });
+
+    async function checkStatus() {
+      try {
+        const resp = await fetch('/api/settings');
+        const data = await resp.json();
+        if (data.has_api_key) {
+          dot.className = 'status-dot status-dot--on';
+          status.textContent = 'Key configured: ' + data.api_key_preview;
+          status.className = 'form-hint form-hint--ok';
+        } else {
+          dot.className = 'status-dot status-dot--off';
+          status.textContent = 'No API key set. Required for agent and backtest features.';
+          status.className = 'form-hint form-hint--warn';
+        }
+      } catch (_) {}
+    }
+
+    saveBtn.addEventListener('click', async () => {
+      const key = input.value.trim();
+      if (!key) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try {
+        const resp = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          input.value = '';
+          await checkStatus();
+          closeModal();
+        } else {
+          status.textContent = 'Error: ' + (data.error || 'Unknown');
+          status.className = 'form-hint form-hint--warn';
+        }
+      } catch (err) {
+        status.textContent = 'Failed to save: ' + err.message;
+        status.className = 'form-hint form-hint--warn';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+
+    checkStatus();
+  })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
