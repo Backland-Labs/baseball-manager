@@ -15,7 +15,6 @@ All randomness is seeded for deterministic replay.
 from __future__ import annotations
 
 import json
-import math
 import random
 from dataclasses import dataclass, field
 from pathlib import Path

@@ -16,8 +16,8 @@ from typing import Optional
 
 from anthropic import beta_tool
 
-from tools.get_run_expectancy import RE_MATRIX, _runners_key, _get_re
-from tools.response import success_response, error_response, player_ref
+from tools.get_run_expectancy import _runners_key, _get_re
+from tools.response import success_response, error_response
 
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup

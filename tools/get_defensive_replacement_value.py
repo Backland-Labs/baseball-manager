@@ -12,11 +12,10 @@ textual recommendation (favorable, marginal, unfavorable).
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from anthropic import beta_tool
 
-from tools.response import success_response, error_response, player_ref
+from tools.response import success_response, error_response
 
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup

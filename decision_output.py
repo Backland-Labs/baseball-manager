@@ -12,7 +12,7 @@ Formats the agent's decisions for output:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Decision types that represent "no action" -- the agent is not intervening
 NO_ACTION_TYPES = {

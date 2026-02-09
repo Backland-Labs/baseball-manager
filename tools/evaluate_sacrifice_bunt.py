@@ -15,10 +15,9 @@ from pathlib import Path
 
 from anthropic import beta_tool
 
-from tools.response import success_response, error_response, player_ref
+from tools.response import success_response, error_response
 
 from tools.get_run_expectancy import (
-    RE_MATRIX,
     PROB_AT_LEAST_ONE,
     _runners_key,
     _get_re,

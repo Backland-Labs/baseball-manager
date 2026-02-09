@@ -10,7 +10,7 @@ from typing import Optional
 
 from anthropic import beta_tool
 
-from tools.response import success_response, error_response, player_ref, unavailable
+from tools.response import success_response, error_response, player_ref
 
 # ---------------------------------------------------------------------------
 # Load roster data and build player lookup
