@@ -456,10 +456,10 @@ def run_backtest(
         return []
 
     # Full backtest: call the agent for each decision point
-    from anthropic import Anthropic
+    from config import create_anthropic_client
     from game import _call_agent, load_system_prompt
 
-    client = Anthropic()
+    client = create_anthropic_client()
     system_prompt = load_system_prompt()
 
     entries: list[ComparisonEntry] = []

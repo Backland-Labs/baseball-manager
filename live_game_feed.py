@@ -14,7 +14,7 @@ during a live game.
 
 Usage::
 
-    # Run against a live game (requires ANTHROPIC_API_KEY)
+    # Run against a live game (requires ANTHROPIC_KEY)
     uv run live_game_feed.py --game-pk 716463 --team "Red Sox"
 
     # Run with custom poll interval
@@ -432,10 +432,10 @@ def invoke_agent(
     else:
         # Import agent functions
         from game import run_agent_decision, SYSTEM_PROMPT
-        from anthropic import Anthropic
+        from config import create_anthropic_client
 
         if client is None:
-            client = Anthropic()
+            client = create_anthropic_client()
 
         # Build scenario from ingested models
         scenario = {
@@ -888,9 +888,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not args.dry_run and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("ANTHROPIC_API_KEY required (use --dry-run to skip agent calls)")
-        sys.exit(1)
+    if not args.dry_run:
+        from config import require_api_key
+        require_api_key("ANTHROPIC_KEY required (use --dry-run to skip agent calls)")
 
     # Configure logging
     logging.basicConfig(

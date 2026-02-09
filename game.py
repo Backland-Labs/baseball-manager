@@ -7,7 +7,7 @@
 # ///
 """Baseball Manager AI Agent -- main entry point.
 
-Run with:  uv run game.py           # full agent game (requires ANTHROPIC_API_KEY)
+Run with:  uv run game.py           # full agent game (requires ANTHROPIC_KEY)
            uv run game.py --dry-run  # validate setup without API calls
            uv run game.py --sim      # run automated sim (no agent, no API key needed)
            uv run game.py --seed 42  # set random seed
@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import random
 import sys
 import time
@@ -26,6 +25,7 @@ import warnings
 from pathlib import Path
 
 from anthropic import Anthropic
+from config import ANTHROPIC_KEY_ENV, get_api_key, create_anthropic_client
 
 logger = logging.getLogger(__name__)
 
@@ -802,7 +802,7 @@ def run_agent_game(seed: int | None = None, managed_team: str = "home",
     Returns:
         Final GameState.
     """
-    client = Anthropic()
+    client = create_anthropic_client()
     rosters = load_rosters()
     engine = SimulationEngine(seed=seed)
 
@@ -1312,7 +1312,7 @@ def run_dry_run() -> None:
     print("ALL VALIDATIONS PASSED")
     print("=" * 72)
     print("\nTo run a full agent-managed game:")
-    print("  ANTHROPIC_API_KEY=<key> uv run game.py")
+    print("  ANTHROPIC_KEY=<key> uv run game.py")
     print("\nTo run an automated simulation (no API key):")
     print("  uv run game.py --sim")
 
@@ -1323,7 +1323,7 @@ def run_dry_run() -> None:
 
 def run_single_turn() -> None:
     """Run a single-turn test: send a scenario, allow tool calls, get a ManagerDecision."""
-    client = Anthropic()
+    client = create_anthropic_client()
     scenario = build_sample_scenario()
 
     user_message = (
@@ -1453,13 +1453,13 @@ if __name__ == "__main__":
     elif "--sim" in sys.argv:
         run_sim(seed=seed, verbose=verbose)
     elif "--single-turn" in sys.argv:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("ANTHROPIC_API_KEY required for single-turn test.")
+        if not get_api_key():
+            print(f"{ANTHROPIC_KEY_ENV} required for single-turn test.")
             sys.exit(1)
         run_single_turn()
-    elif not os.environ.get("ANTHROPIC_API_KEY"):
-        print("No ANTHROPIC_API_KEY set. Running dry-run validation instead.")
-        print("Set ANTHROPIC_API_KEY to run the full agent game.\n")
+    elif not get_api_key():
+        print(f"No {ANTHROPIC_KEY_ENV} set. Running dry-run validation instead.")
+        print(f"Set {ANTHROPIC_KEY_ENV} to run the full agent game.\n")
         run_dry_run()
     else:
         run_agent_game(seed=seed, managed_team=managed_team, verbose=verbose)

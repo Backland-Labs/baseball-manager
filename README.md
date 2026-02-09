@@ -40,7 +40,7 @@ The agent is stateless per invocation -- each at-bat is an independent decision.
 
 - Python 3.12+
 - [uv](https://astral.sh/uv) package runner
-- `ANTHROPIC_API_KEY` environment variable (not needed for `--sim` mode)
+- `ANTHROPIC_KEY` environment variable (not needed for `--sim` mode)
 
 ## Quick Start
 
@@ -52,10 +52,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv run game.py --sim
 
 # Run with the AI agent managing the home team
-ANTHROPIC_API_KEY=sk-... uv run game.py
+ANTHROPIC_KEY=sk-... uv run game.py
 
 # Run against a live MLB game
-ANTHROPIC_API_KEY=sk-... uv run live_game_feed.py --game-pk 716463 --team "Red Sox"
+ANTHROPIC_KEY=sk-... uv run live_game_feed.py --game-pk 716463 --team "Red Sox"
 ```
 
 ## Usage
@@ -90,7 +90,7 @@ uv run live_game_feed.py --game-pk 716463 --team BOS --tweet-dry-run
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes (except `--sim`) | Claude API key |
+| `ANTHROPIC_KEY` | Yes (except `--sim`) | Claude API key |
 | `TWITTER_API_KEY` | No | Twitter API v2 key |
 | `TWITTER_API_SECRET` | No | Twitter API secret |
 | `TWITTER_ACCESS_TOKEN` | No | Twitter access token |

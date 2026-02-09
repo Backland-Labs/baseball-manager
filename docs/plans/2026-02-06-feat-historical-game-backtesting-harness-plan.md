@@ -179,7 +179,7 @@ Build the full pipeline: decision point extraction, real-stat tools, scenario bu
   uv run backtest.py --game-pk 716463 --team "Red Sox"
   uv run backtest.py --game-pk 716463 --team BOS --dry-run
   ```
-- [ ] Pre-flight validation: check ANTHROPIC_API_KEY (unless --dry-run), verify game_pk is valid and Final, verify team played in the game, verify season >= 2022
+- [ ] Pre-flight validation: check ANTHROPIC_KEY (unless --dry-run), verify game_pk is valid and Final, verify team played in the game, verify season >= 2022
 - [ ] `--dry-run` mode: extract decision points and build scenarios without calling Claude API. Print decision point count, breakdown by type (how many real manager actions detected), and estimated token cost.
 - [ ] Progress output: show current decision point / total during run
 

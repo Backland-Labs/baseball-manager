@@ -6,9 +6,9 @@
 """Test agent integration with a limited number of decision points."""
 
 import json
-import os
 import sys
-from anthropic import Anthropic
+
+from config import create_anthropic_client
 
 from backtest.extractor import walk_game_feed
 from backtest.runner import build_scenario, compare_decisions
@@ -19,11 +19,6 @@ from game import _call_agent, load_system_prompt
 def main():
     print('=== Limited Agent Backtest (3 decision points) ===')
     print()
-
-    # Check API key
-    if not os.environ.get('ANTHROPIC_API_KEY'):
-        print('Error: ANTHROPIC_API_KEY not set', file=sys.stderr)
-        return 1
 
     # Fetch game
     print('Fetching game feed...')
@@ -43,7 +38,7 @@ def main():
     print()
 
     # Initialize Anthropic client
-    client = Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+    client = create_anthropic_client()
     system_prompt = load_system_prompt()
 
     results = []

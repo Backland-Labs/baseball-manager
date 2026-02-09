@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -71,10 +70,9 @@ def main() -> int:
     )
 
     # Pre-flight: validate API key unless dry-run
-    if not args.dry_run and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY environment variable not set.", file=sys.stderr)
-        print("Set it or use --dry-run to skip agent calls.", file=sys.stderr)
-        return 1
+    if not args.dry_run:
+        from config import require_api_key
+        require_api_key("ANTHROPIC_KEY environment variable not set. Set it or use --dry-run to skip agent calls.")
 
     # Fetch and validate game
     try:
