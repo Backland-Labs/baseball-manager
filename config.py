@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "anthropic>=0.78.0",
+# ]
+# ///
 """Centralized configuration for environment variables."""
 
 import os

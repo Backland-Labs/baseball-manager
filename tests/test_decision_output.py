@@ -821,8 +821,9 @@ class TestNoActionTypes:
         assert isinstance(NO_ACTION_TYPES, set)
 
     def test_contains_expected_types(self):
-        expected = {"NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
-                    "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER"}
+        expected = {"NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "LET_BATTER_HIT",
+                    "NO_CHANGE", "CONTINUE", "HOLD", "STANDARD_PLAY",
+                    "PITCH_TO_BATTER", "KEEP_CURRENT"}
         assert expected == NO_ACTION_TYPES
 
     def test_consistent_with_game_module(self):

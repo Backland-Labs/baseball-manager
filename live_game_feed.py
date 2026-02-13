@@ -851,6 +851,46 @@ def run_live_game(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+def find_todays_game(team: str) -> int:
+    """Find today's game PK for a given team.
+
+    Args:
+        team: Team name, abbreviation, or ID.
+
+    Returns:
+        The gamePk for today's game.
+
+    Raises:
+        SystemExit: If no game is found or multiple games match.
+    """
+    import datetime
+    from find_games import find_games
+
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    games = find_games(date=today, team=team)
+
+    if not games:
+        print(f"No games found for '{team}' today ({today}).")
+        print("Use --game-pk to specify a game manually, or --date for a different date.")
+        sys.exit(1)
+
+    # Prefer live games over scheduled ones
+    live = [g for g in games if g.get("status", {}).get("abstractGameState") == "Live"]
+    if live:
+        game = live[0]
+    else:
+        game = games[0]
+
+    game_pk = game.get("gamePk")
+    teams = game.get("teams", {})
+    away = teams.get("away", {}).get("team", {}).get("name", "?")
+    home = teams.get("home", {}).get("team", {}).get("name", "?")
+    status = game.get("status", {}).get("detailedState", "Unknown")
+
+    print(f"Found game: {away} at {home} (PK: {game_pk}, {status})")
+    return game_pk
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -858,8 +898,8 @@ if __name__ == "__main__":
         description="Live game feed service for the baseball manager AI agent."
     )
     parser.add_argument(
-        "--game-pk", type=int, required=True,
-        help="MLB game identifier (gamePk)",
+        "--game-pk", type=int, default=None,
+        help="MLB game identifier (gamePk). If omitted with --team, auto-discovers today's game.",
     )
     parser.add_argument(
         "--team", type=str, required=True,
@@ -887,6 +927,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    # Auto-discover game PK if not provided
+    game_pk = args.game_pk
+    if game_pk is None:
+        game_pk = find_todays_game(args.team)
 
     if not args.dry_run:
         from config import require_api_key
@@ -916,7 +961,7 @@ if __name__ == "__main__":
         poster = TweetPoster(config=config, dry_run=tweet_dry)
 
     run_live_game(
-        game_pk=args.game_pk,
+        game_pk=game_pk,
         team=args.team,
         poll_interval=args.interval,
         dry_run=args.dry_run,

@@ -1071,14 +1071,15 @@ class TestNoActionTypes:
     def test_no_action_types_matches_game_module(self):
         from game import NO_ACTION_TYPES as game_no_actions
         from decision_quality_wpa import NO_ACTION_TYPES as wpa_no_actions
-        assert game_no_actions == wpa_no_actions
+        assert set(game_no_actions) == set(wpa_no_actions)
 
     def test_no_action_types_is_frozenset(self):
         assert isinstance(NO_ACTION_TYPES, frozenset)
 
     def test_known_no_action_types(self):
-        expected = {"NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
-                    "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER"}
+        expected = {"NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "LET_BATTER_HIT",
+                    "NO_CHANGE", "CONTINUE", "HOLD", "STANDARD_PLAY",
+                    "PITCH_TO_BATTER", "KEEP_CURRENT"}
         assert NO_ACTION_TYPES == expected
 
 

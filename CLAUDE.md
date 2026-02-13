@@ -15,8 +15,20 @@ uv run game.py --sim
 # Run agent-managed game
 ANTHROPIC_KEY=sk-... uv run game.py
 
-# Live MLB game monitoring
+# Find today's games (or any date)
+uv run find_games.py
+uv run find_games.py --date 2025-07-04 --team "Red Sox"
+uv run find_games.py --live  # only in-progress games
+
+# Live MLB game monitoring (with explicit game PK)
 ANTHROPIC_KEY=sk-... uv run live_game_feed.py --game-pk 716463 --team "Red Sox"
+
+# Live monitoring (auto-discovers today's game for team)
+ANTHROPIC_KEY=sk-... uv run live_game_feed.py --team "Red Sox"
+
+# Live monitoring with tweet output
+ANTHROPIC_KEY=sk-... uv run live_game_feed.py --team "Red Sox" --tweet-dry-run
+ANTHROPIC_KEY=sk-... uv run live_game_feed.py --team "Red Sox" --tweet  # real posting
 
 # Web dashboard
 uv run app.py
@@ -45,7 +57,7 @@ MLB Stats API --> External Service (polls ~10s) --> Agent (Claude + 12 tools) --
 
 **Layered structure:** Pydantic models --> data layer --> tools --> agent --> output
 
-- **Entry points:** `game.py` (agent game runner), `live_game_feed.py` (live polling), `app.py` (Flask web UI), `backtest.py` (backtesting CLI)
+- **Entry points:** `game.py` (agent game runner), `live_game_feed.py` (live polling), `find_games.py` (game discovery), `app.py` (Flask web UI), `backtest.py` (backtesting CLI)
 - **Agent input:** Three Pydantic models per at-bat: `MatchupState`, `RosterState`, `OpponentRosterState` (defined in `models.py`)
 - **Tools** (`tools/`): 12 read-only analytical tools that query MLB Stats API, Statcast, and FanGraphs. Tools gather context; the agent's decision is expressed through its plain-text response, not via tool calls.
 - **Data layer** (`data/`): `mlb_api.py` (MLB Stats API client), `statcast.py` (pybaseball/Statcast/FanGraphs), `bvp_history.py` (batter-vs-pitcher), `cache.py` (file-based JSON cache, 24h TTL)

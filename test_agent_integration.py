@@ -1,8 +1,8 @@
-#!/usr/bin/env python
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["anthropic>=0.78.0", "pydantic>=2.0"]
 # ///
+#!/usr/bin/env python
 """Test agent integration with a limited number of decision points."""
 
 import json

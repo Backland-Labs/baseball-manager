@@ -593,8 +593,9 @@ def run_agent_decision(client: Anthropic, game_state: GameState,
 
 
 NO_ACTION_TYPES = {
-    "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "NO_CHANGE",
-    "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    "NO_ACTION", "SWING_AWAY", "LET_HIM_HIT", "LET_BATTER_HIT",
+    "NO_CHANGE", "CONTINUE", "HOLD", "STANDARD_PLAY", "PITCH_TO_BATTER",
+    "KEEP_CURRENT",
 }
 
 
